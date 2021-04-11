@@ -5,7 +5,8 @@ import {DropdownDemo} from './dropdowndemo';
 import {DropdownDemoRoutingModule} from './dropdowndemo-routing.module';
 import {DropdownModule} from 'primeng/dropdown';
 import {TabViewModule} from 'primeng/tabview';
-import {CodeHighlighterModule} from 'primeng/codehighlighter';
+import {AppCodeModule} from '../../app.code.component';
+import {AppDemoActionsModule} from '../../app.demoactions.component';
 
 @NgModule({
 	imports: [
@@ -13,8 +14,9 @@ import {CodeHighlighterModule} from 'primeng/codehighlighter';
         FormsModule,
 		DropdownDemoRoutingModule,
         DropdownModule,
-        TabViewModule,
-        CodeHighlighterModule
+		TabViewModule,
+		AppDemoActionsModule,
+		AppCodeModule
 	],
 	declarations: [
 		DropdownDemo

@@ -6,7 +6,8 @@ import {InputTextDemoRoutingModule} from './inputtextdemo-routing.module';
 import {InputTextModule} from 'primeng/inputtext';
 import {ButtonModule} from 'primeng/button';
 import {TabViewModule} from 'primeng/tabview';
-import {CodeHighlighterModule} from 'primeng/codehighlighter';
+import {AppCodeModule} from '../../app.code.component';
+import {AppDemoActionsModule} from '../../app.demoactions.component';
 
 @NgModule({
 	imports: [
@@ -15,8 +16,9 @@ import {CodeHighlighterModule} from 'primeng/codehighlighter';
         FormsModule,
         InputTextModule,
         ButtonModule,
-        TabViewModule,
-        CodeHighlighterModule
+		TabViewModule,
+		AppDemoActionsModule,
+        AppCodeModule
 	],
 	declarations: [
 		InputTextDemo

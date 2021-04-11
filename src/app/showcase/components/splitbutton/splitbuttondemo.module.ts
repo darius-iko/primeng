@@ -5,7 +5,8 @@ import {SplitButtonDemoRoutingModule} from './splitbuttondemo-routing.module';
 import {SplitButtonModule} from 'primeng/splitbutton';
 import {ToastModule} from 'primeng/toast';
 import {TabViewModule} from 'primeng/tabview';
-import {CodeHighlighterModule} from 'primeng/codehighlighter';
+import {AppCodeModule} from '../../app.code.component';
+import {AppDemoActionsModule} from '../../app.demoactions.component';
 
 @NgModule({
 	imports: [
@@ -13,8 +14,9 @@ import {CodeHighlighterModule} from 'primeng/codehighlighter';
 		SplitButtonDemoRoutingModule,
         SplitButtonModule,
         ToastModule,
-        TabViewModule,
-        CodeHighlighterModule
+		TabViewModule,
+		AppDemoActionsModule,
+		AppCodeModule
 	],
 	declarations: [
 		SplitButtonDemo

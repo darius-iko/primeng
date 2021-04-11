@@ -7,7 +7,8 @@ import {KeyFilterDemoRoutingModule} from './keyfilterdemo-routing.module';
 import {KeyFilterModule} from 'primeng/keyfilter';
 import {InputTextModule} from 'primeng/inputtext';
 import {TabViewModule} from 'primeng/tabview';
-import {CodeHighlighterModule} from 'primeng/codehighlighter';
+import {AppCodeModule} from '../../app.code.component';
+import {AppDemoActionsModule} from '../../app.demoactions.component';
 
 @NgModule({
 	imports: [
@@ -17,8 +18,9 @@ import {CodeHighlighterModule} from 'primeng/codehighlighter';
 		KeyFilterModule,
 		InputTextModule,
 		MessageModule,
-        TabViewModule,
-        CodeHighlighterModule
+		TabViewModule,
+		AppDemoActionsModule,
+		AppCodeModule
 	],
 	declarations: [
 		KeyFilterDemo

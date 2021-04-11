@@ -5,7 +5,8 @@ import {RatingDemo} from './ratingdemo';
 import {RatingDemoRoutingModule} from './ratingdemo-routing.module';
 import {RatingModule} from 'primeng/rating';
 import {TabViewModule} from 'primeng/tabview';
-import {CodeHighlighterModule} from 'primeng/codehighlighter';
+import {AppCodeModule} from '../../app.code.component';
+import {AppDemoActionsModule} from '../../app.demoactions.component';
 
 @NgModule({
 	imports: [
@@ -13,8 +14,9 @@ import {CodeHighlighterModule} from 'primeng/codehighlighter';
         FormsModule,
 		RatingDemoRoutingModule,
         RatingModule,
-        TabViewModule,
-        CodeHighlighterModule
+		TabViewModule,
+		AppCodeModule,
+		AppDemoActionsModule
 	],
 	declarations: [
 		RatingDemo

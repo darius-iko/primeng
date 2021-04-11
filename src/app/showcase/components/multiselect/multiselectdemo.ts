@@ -1,58 +1,97 @@
 import {Component} from '@angular/core';
-import {SelectItem} from 'primeng/api';
+import {CountryService} from '../../service/countryservice';
+import {SelectItemGroup} from 'primeng/api';
+
+interface City {
+    name: string,
+    code: string
+}
+
+interface Country {
+    name: string,
+    code: string
+}
 
 @Component({
     templateUrl: './multiselectdemo.html',
-    styles: [`
-        :host ::ng-deep .ui-multiselected-item-token,
-        :host ::ng-deep .ui-multiselected-empty-token {
-            padding: 2px 4px;
-            margin: 0 0.286em 0 0;
-            display: inline-block;
-            vertical-align:middle;
-            height: 1.857em;
-        }
-
-        :host ::ng-deep .ui-multiselected-item-token {
-            background: #007ad9;
-            color: #ffffff;
-        }
-
-        :host ::ng-deep .ui-multiselected-empty-token {
-            background: #d95f00;
-            color: #ffffff;
-        }
-    `]
+    styleUrls: ['./multiselectdemo.scss']
 })
 export class MultiSelectDemo {
 
-    cars: SelectItem[];
+    selectedCities1: City[];
 
-    selectedCars1: string[] = [];
+    selectedCities2: City[];
+
+    selectedCities3: any[];
+
+    selectedCities4: any[];
     
-    selectedCars2: string[] = [];
+    selectedCountries1: Country[];
 
-    items: SelectItem[];
+    selectedCountries2: Country[];
 
-    item: string;
+    cities: City[];
 
-    constructor() {
-        this.cars = [
-            {label: 'Audi', value: 'Audi'},
-            {label: 'BMW', value: 'BMW'},
-            {label: 'Fiat', value: 'Fiat'},
-            {label: 'Ford', value: 'Ford'},
-            {label: 'Honda', value: 'Honda'},
-            {label: 'Jaguar', value: 'Jaguar'},
-            {label: 'Mercedes', value: 'Mercedes'},
-            {label: 'Renault', value: 'Renault'},
-            {label: 'VW', value: 'VW'},
-            {label: 'Volvo', value: 'Volvo'},
+    groupedCities: SelectItemGroup[];
+
+    countries: City[];
+
+    virtualCountries: Country[];
+
+    constructor(private countryService: CountryService) {
+        this.cities = [
+            {name: 'New York', code: 'NY'},
+            {name: 'Rome', code: 'RM'},
+            {name: 'London', code: 'LDN'},
+            {name: 'Istanbul', code: 'IST'},
+            {name: 'Paris', code: 'PRS'}
         ];
-        
-        this.items = [];
-        for (let i = 0; i < 10000; i++) {
-            this.items.push({label: 'Item ' + i, value: 'Item ' + i});
-        }
+
+        this.countries = [
+            {name: 'Australia', code: 'AU'},
+            {name: 'Brazil', code: 'BR'},
+            {name: 'China', code: 'CN'},
+            {name: 'Egypt', code: 'EG'},
+            {name: 'France', code: 'FR'},
+            {name: 'Germany', code: 'DE'},
+            {name: 'India', code: 'IN'},
+            {name: 'Japan', code: 'JP'},
+            {name: 'Spain', code: 'ES'},
+            {name: 'United States', code: 'US'}
+        ];
+
+        this.groupedCities = [
+            {
+                label: 'Germany', value: 'de', 
+                items: [
+                    {label: 'Berlin', value: 'Berlin'},
+                    {label: 'Frankfurt', value: 'Frankfurt'},
+                    {label: 'Hamburg', value: 'Hamburg'},
+                    {label: 'Munich', value: 'Munich'}
+                ]
+            },
+            {
+                label: 'USA', value: 'us', 
+                items: [
+                    {label: 'Chicago', value: 'Chicago'},
+                    {label: 'Los Angeles', value: 'Los Angeles'},
+                    {label: 'New York', value: 'New York'},
+                    {label: 'San Francisco', value: 'San Francisco'}
+                ]
+            },
+            {
+                label: 'Japan', value: 'jp', 
+                items: [
+                    {label: 'Kyoto', value: 'Kyoto'},
+                    {label: 'Osaka', value: 'Osaka'},
+                    {label: 'Tokyo', value: 'Tokyo'},
+                    {label: 'Yokohama', value: 'Yokohama'}
+                ]
+            }
+        ];
+
+        this.countryService.getCountries().then(countries => {
+            this.virtualCountries = countries;
+        });
     }
 }

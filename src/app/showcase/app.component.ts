@@ -1,122 +1,84 @@
-import { Component, OnInit } from '@angular/core';
-import { Router } from '@angular/router';
-import { trigger, state, style, transition, animate } from '@angular/animations';
+import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Router, NavigationEnd } from '@angular/router';
+import { AppConfigService } from './service/appconfigservice';
+import { AppConfig } from './domain/appconfig';
+import { Subscription } from 'rxjs';
+import { PrimeNGConfig } from 'primeng/api';
+
+declare let gtag: Function;
 
 @Component({
-  selector: 'app-root',
-  templateUrl: './app.component.html',
-  styleUrls: ['./app.component.css'],
-  animations: [
-    trigger('animation', [
-        state('hidden', style({
-            height: '0',
-            overflow: 'hidden',
-            maxHeight: '0',
-            paddingTop: '0',
-            paddingBottom: '0',
-            marginTop: '0',
-            marginBottom: '0',
-            opacity: '0',
-        })),
-        state('void', style({
-            height: '0',
-            overflow: 'hidden',
-            maxHeight: '0',
-            paddingTop: '0',
-            paddingBottom: '0',
-            marginTop: '0',
-            marginBottom: '0',
-        })),
-        state('visible', style({
-            height: '*'
-        })),
-        transition('visible <=> hidden', animate('400ms cubic-bezier(0.86, 0, 0.07, 1)')),
-        transition('void => hidden', animate('400ms cubic-bezier(0.86, 0, 0.07, 1)')),
-        transition('void => visible', animate('400ms cubic-bezier(0.86, 0, 0.07, 1)'))
-    ])
-]
+    selector: 'app-root',
+    templateUrl: './app.component.html',
+    styleUrls: ['./app.component.css']
 })
-export class AppComponent implements OnInit{
+export class AppComponent implements OnInit, OnDestroy {
 
     menuActive: boolean;
 
-    activeMenuId: string;
+    newsActive: boolean = true;
 
-    darkDemoStyle: HTMLStyleElement;
+    config: AppConfig;
 
-    routes: Array<string> = [];
+    news_key = 'primenews';
 
-    filteredRoutes: Array<string> = [];
+    theme: string = "saga-blue";
 
-    searchText:string;
+    public subscription: Subscription;
 
-    constructor(private router:Router){}
+    constructor(private router: Router, private configService: AppConfigService, private primengConfig: PrimeNGConfig) {}
 
     ngOnInit() {
-        let routes = this.router.config;
-        for (let route of routes) {
-            this.routes.push(route.path.charAt(0).toUpperCase() + route.path.substr(1)); 
-        }
-    }
-
-    onAnimationStart (event) {
-        switch (event.toState) {
-            case 'visible':
-                event.element.style.display = 'block';
-            break;
-        }
-    }
-    onAnimationDone (event) {
-        switch (event.toState) {
-            case 'hidden':
-                event.element.style.display = 'none';
-            break;
-
-            case 'void':
-                event.element.style.display = 'none';
-            break;
-        }
-    }
-
-    toggle(id:string) {
-        this.activeMenuId = (this.activeMenuId === id ? null : id);
-    }
-
-    onKeydown(event: KeyboardEvent,id:string) {
-        if (event.which === 32 || event.which === 13) {
-            this.toggle(id);
-            event.preventDefault();
-        }
-    }
-
-    selectRoute(routeName) {
-        this.router.navigate(['/'+routeName.toLowerCase()]);
-        this.filteredRoutes = [];
-        this.searchText = "";
-    }
-
-    filterRoutes(event) {
-        let query = event.query;
-        this.filteredRoutes = this.routes.filter(route => {
-            return route.toLowerCase().includes(query.toLowerCase());
+        this.primengConfig.ripple = true;
+        this.config = this.configService.config;
+        this.subscription = this.configService.configUpdate$.subscribe(config => {
+            this.config = config;
+            localStorage.setItem('theme', this.config.theme);
         });
+
+        this.router.events.subscribe(event => {
+            if (event instanceof NavigationEnd) {
+                gtag('config', 'UA-93461466-1',
+                      {
+                        'page_path': '/primeng' + event.urlAfterRedirects
+                      }
+                );
+
+                this.hideMenu();
+             }
+        });
+
+        this.newsActive = this.newsActive && this.isNewsStorageExpired();
+
+        let appTheme;
+        const queryString = window.location.search;
+        
+        if (queryString)
+            appTheme = new URLSearchParams(queryString.substring(1)).get('theme');
+        else
+            appTheme = localStorage.getItem('theme');
+
+        if (appTheme) {
+            let darkTheme = this.isDarkTheme(appTheme);
+            this.changeTheme({
+                theme: appTheme,
+                dark: darkTheme
+            });
+        }
     }
 
-    changeTheme(event: Event, theme: string, dark: boolean) {
-        let themeLink: HTMLLinkElement = <HTMLLinkElement> document.getElementById('theme-css');
-        themeLink.href = 'assets/components/themes/' + theme + '/theme.css';
-        const hasBodyDarkTheme = this.hasClass(document.body, 'dark-theme');
-        
-        if (dark) {
-            if (!hasBodyDarkTheme) {
-                this.addClass(document.body, 'dark-theme');
-            }
-        }
-        else if(hasBodyDarkTheme) {
-            this.removeClass(document.body, 'dark-theme');
-        }
-        
-        event.preventDefault();
+    onMenuButtonClick() {
+        this.menuActive = true;
+        this.addClass(document.body, 'blocked-scroll');
+    }
+
+    onMaskClick() {
+        this.hideMenu();
+    }
+
+    hideMenu() {
+        this.menuActive = false;
+        this.removeClass(document.body, 'blocked-scroll');
     }
 
     addClass(element: any, className: string) {
@@ -133,15 +95,61 @@ export class AppComponent implements OnInit{
             element.className = element.className.replace(new RegExp('(^|\\b)' + className.split(' ').join('|') + '(\\b|$)', 'gi'), ' ');
     }
 
-    hasClass(element: any, className: string) {
-        if (element.classList)
-            return element.classList.contains(className);
-        else
-            return new RegExp('(^| )' + className + '( |$)', 'gi').test(element.className);
+    hideNews() {
+        this.newsActive = false;
+        const now = new Date();
+        const item = {
+            value: false,
+            expiry: now.getTime() + 604800000,
+        }
+        localStorage.setItem(this.news_key, JSON.stringify(item));
     }
 
-    onMenuButtonClick(event: Event) {
-        this.menuActive = !this.menuActive;
-        event.preventDefault();
+    isNewsStorageExpired() {
+        const newsString = localStorage.getItem(this.news_key);
+        if (!newsString) {
+            return true;
+        }
+        const newsItem = JSON.parse(newsString);
+        const now = new Date()
+
+        if (now.getTime() > newsItem.expiry) {
+            localStorage.removeItem(this.news_key);
+            return true;
+        }
+
+        return false;
+    }
+
+    changeTheme(event) {
+        let themeElement = document.getElementById('theme-link');
+        themeElement.setAttribute('href', themeElement.getAttribute('href').replace(this.theme, event.theme));
+        this.theme = event.theme;
+
+        this.config.dark = event.dark;
+        this.config.theme = this.theme;
+        this.configService.updateConfig(this.config);
+
+        if (event.theme.startsWith('md')) {
+            this.config.ripple = true;
+        }
+
+        if (this.config.theme === 'nano')
+            this.applyScale(12);
+        
+    }
+
+    isDarkTheme(theme) {
+        return theme.indexOf('dark') !== -1 || theme.indexOf('vela') !== -1 || theme.indexOf('arya') !== -1 || theme.indexOf('luna') !== -1;
+    }
+
+    applyScale(scale: number) {
+        document.documentElement.style.fontSize = scale + 'px';
+    }
+
+    ngOnDestroy() {
+        if (this.subscription) {
+            this.subscription.unsubscribe();
+        }
     }
 }

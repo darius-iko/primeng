@@ -8,7 +8,9 @@ import {CheckboxModule} from 'primeng/checkbox';
 import {RadioButtonModule} from 'primeng/radiobutton';
 import {ButtonModule} from 'primeng/button';
 import {TabViewModule} from 'primeng/tabview';
-import {CodeHighlighterModule} from 'primeng/codehighlighter';
+import {RippleModule} from 'primeng/ripple';
+import {AppCodeModule} from '../../app.code.component';
+import {AppDemoActionsModule} from '../../app.demoactions.component';
 
 @NgModule({
 	imports: [
@@ -19,8 +21,10 @@ import {CodeHighlighterModule} from 'primeng/codehighlighter';
         ButtonModule,
         CheckboxModule,
         RadioButtonModule,
+        RippleModule,
         TabViewModule,
-        CodeHighlighterModule
+        AppDemoActionsModule,
+        AppCodeModule
 	],
 	declarations: [
 		InputGroupDemo

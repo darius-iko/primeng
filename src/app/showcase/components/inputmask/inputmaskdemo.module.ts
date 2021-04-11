@@ -5,7 +5,8 @@ import {InputMaskDemo} from './inputmaskdemo';
 import {InputMaskDemoRoutingModule} from './inputmaskdemo-routing.module';
 import {InputMaskModule} from 'primeng/inputmask';
 import {TabViewModule} from 'primeng/tabview';
-import {CodeHighlighterModule} from 'primeng/codehighlighter';
+import {AppCodeModule} from '../../app.code.component';
+import {AppDemoActionsModule} from '../../app.demoactions.component';
 
 @NgModule({
 	imports: [
@@ -14,7 +15,8 @@ import {CodeHighlighterModule} from 'primeng/codehighlighter';
 		InputMaskDemoRoutingModule,
         InputMaskModule,
         TabViewModule,
-        CodeHighlighterModule
+		AppDemoActionsModule,
+		AppCodeModule
 	],
 	declarations: [
 		InputMaskDemo

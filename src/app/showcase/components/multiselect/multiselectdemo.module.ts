@@ -5,7 +5,8 @@ import {MultiSelectDemo} from './multiselectdemo';
 import {MultiSelectDemoRoutingModule} from './multiselectdemo-routing.module';
 import {MultiSelectModule} from 'primeng/multiselect';
 import {TabViewModule} from 'primeng/tabview';
-import {CodeHighlighterModule} from 'primeng/codehighlighter';
+import {AppCodeModule} from '../../app.code.component';
+import {AppDemoActionsModule} from '../../app.demoactions.component';
 
 
 @NgModule({
@@ -14,8 +15,9 @@ import {CodeHighlighterModule} from 'primeng/codehighlighter';
         FormsModule,
 		MultiSelectDemoRoutingModule,
         MultiSelectModule,
-        TabViewModule,
-        CodeHighlighterModule
+		TabViewModule,
+		AppDemoActionsModule,
+		AppCodeModule
 	],
 	declarations: [
 		MultiSelectDemo

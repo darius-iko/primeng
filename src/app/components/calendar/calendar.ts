@@ -1,11 +1,13 @@
 import {NgModule,Component,ElementRef,OnDestroy,OnInit,Input,Output,EventEmitter,forwardRef,Renderer2,
-        ViewChild,ChangeDetectorRef,TemplateRef,ContentChildren,QueryList, NgZone} from '@angular/core';
+        ViewChild,ChangeDetectorRef,TemplateRef,ContentChildren,QueryList,NgZone,ChangeDetectionStrategy, ViewEncapsulation} from '@angular/core';
 import {trigger,state,style,transition,animate,AnimationEvent} from '@angular/animations';
 import {CommonModule} from '@angular/common';
 import {ButtonModule} from 'primeng/button';
-import {DomHandler} from 'primeng/dom';
-import {SharedModule,PrimeTemplate} from 'primeng/api';
+import {RippleModule} from 'primeng/ripple';
+import {DomHandler, ConnectedOverlayScrollHandler} from 'primeng/dom';
+import {SharedModule,PrimeTemplate,PrimeNGConfig,TranslationKeys} from 'primeng/api';
 import {NG_VALUE_ACCESSOR, ControlValueAccessor} from '@angular/forms';
+import {Subscription} from 'rxjs';
 
 export const CALENDAR_VALUE_ACCESSOR: any = {
     provide: NG_VALUE_ACCESSOR,
@@ -15,13 +17,13 @@ export const CALENDAR_VALUE_ACCESSOR: any = {
 
 export interface LocaleSettings {
     firstDayOfWeek?: number;
-    dayNames: string[];
-    dayNamesShort: string[];
-    dayNamesMin: string[];
-    monthNames: string[];
-    monthNamesShort: string[];
-    today: string;
-    clear: string;
+    dayNames?: string[];
+    dayNamesShort?: string[];
+    dayNamesMin?: string[];
+    monthNames?: string[];
+    monthNamesShort?: string[];
+    today?: string;
+    clear?: string;
     dateFormat?: string;
     weekHeader?: string;
 }
@@ -29,180 +31,154 @@ export interface LocaleSettings {
 @Component({
     selector: 'p-calendar',
     template:  `
-        <span [ngClass]="{'ui-calendar':true, 'ui-calendar-w-btn': showIcon, 'ui-calendar-timeonly': timeOnly}" [ngStyle]="style" [class]="styleClass">
+        <span #container [ngClass]="{'p-calendar':true, 'p-calendar-w-btn': showIcon, 'p-calendar-timeonly': timeOnly, 'p-calendar-disabled':disabled, 'p-focus': focus}" [ngStyle]="style" [class]="styleClass">
             <ng-template [ngIf]="!inline">
-                <input #inputfield type="text" [attr.id]="inputId" [attr.name]="name" [attr.required]="required" [attr.aria-required]="required" [value]="inputFieldValue" (focus)="onInputFocus($event)" (keydown)="onInputKeydown($event)" (click)="onInputClick($event)" (blur)="onInputBlur($event)"
-                    [readonly]="readonlyInput" (input)="onUserInput($event)" [ngStyle]="inputStyle" [class]="inputStyleClass" [placeholder]="placeholder||''" [disabled]="disabled" [attr.tabindex]="tabindex"
-                    [ngClass]="'ui-inputtext ui-widget ui-state-default ui-corner-all'" autocomplete="off"
-                    ><button type="button" [icon]="icon" pButton *ngIf="showIcon" (click)="onButtonClick($event,inputfield)" class="ui-datepicker-trigger ui-calendar-button"
-                    [ngClass]="{'ui-state-disabled':disabled}" [disabled]="disabled" tabindex="-1"></button>
+                <input #inputfield type="text" [attr.id]="inputId" [attr.name]="name" [attr.required]="required" [attr.aria-required]="required" [value]="inputFieldValue" (focus)="onInputFocus($event)" (keydown)="onInputKeydown($event)" (click)="onInputClick()" (blur)="onInputBlur($event)"
+                    [readonly]="readonlyInput" (input)="onUserInput($event)" [ngStyle]="inputStyle" [class]="inputStyleClass" [placeholder]="placeholder||''" [disabled]="disabled" [attr.tabindex]="tabindex" [attr.inputmode]="touchUI ? 'off' : null"
+                    [ngClass]="'p-inputtext p-component'" autocomplete="off" [attr.aria-labelledby]="ariaLabelledBy"
+                    ><button type="button" [icon]="icon" pButton pRipple *ngIf="showIcon" (click)="onButtonClick($event,inputfield)" class="p-datepicker-trigger"
+                    [disabled]="disabled" tabindex="0"></button>
             </ng-template>
-            <div [class]="panelStyleClass" [ngStyle]="panelStyle" [ngClass]="{'ui-datepicker ui-widget ui-widget-content ui-helper-clearfix ui-corner-all': true, 'ui-datepicker-inline':inline,'ui-shadow':!inline,
-                'ui-state-disabled':disabled,'ui-datepicker-timeonly':timeOnly,'ui-datepicker-multiple-month': this.numberOfMonths > 1, 'ui-datepicker-monthpicker': (view === 'month'), 'ui-datepicker-touch-ui': touchUI}"
-                [@overlayAnimation]="touchUI ? {value: 'visibleTouchUI', params: {showTransitionParams: showTransitionOptions, hideTransitionParams: hideTransitionOptions}}: 
-                                            {value: 'visible', params: {showTransitionParams: showTransitionOptions, hideTransitionParams: hideTransitionOptions}}" 
+            <div #contentWrapper [class]="panelStyleClass" [ngStyle]="panelStyle" [ngClass]="{'p-datepicker p-component': true, 'p-datepicker-inline':inline,
+                'p-disabled':disabled,'p-datepicker-timeonly':timeOnly,'p-datepicker-multiple-month': this.numberOfMonths > 1, 'p-datepicker-monthpicker': (view === 'month'), 'p-datepicker-touch-ui': touchUI}"
+                [@overlayAnimation]="touchUI ? {value: 'visibleTouchUI', params: {showTransitionParams: showTransitionOptions, hideTransitionParams: hideTransitionOptions}}:
+                                            {value: 'visible', params: {showTransitionParams: showTransitionOptions, hideTransitionParams: hideTransitionOptions}}"
                                             [@.disabled]="inline === true" (@overlayAnimation.start)="onOverlayAnimationStart($event)" (@overlayAnimation.done)="onOverlayAnimationDone($event)" *ngIf="inline || overlayVisible">
                 <ng-content select="p-header"></ng-content>
+                <ng-container *ngTemplateOutlet="headerTemplate"></ng-container>
                 <ng-container *ngIf="!timeOnly">
-                    <div class="ui-datepicker-group ui-widget-content" *ngFor="let month of months; let i = index;">
-                        <div class="ui-datepicker-header ui-widget-header ui-helper-clearfix ui-corner-all">
-                            <a class="ui-datepicker-prev ui-corner-all" (click)="navBackward($event)" *ngIf="i === 0">
-                                <span class="ui-datepicker-prev-icon pi pi-chevron-left"></span>
-                            </a>
-                            <a class="ui-datepicker-next ui-corner-all" (click)="navForward($event)" *ngIf="numberOfMonths === 1 ? true : (i === numberOfMonths -1)">
-                                <span class="ui-datepicker-next-icon pi pi-chevron-right"></span>
-                            </a>
-                            <div class="ui-datepicker-title">
-                                <span class="ui-datepicker-month" *ngIf="!monthNavigator && (view !== 'month')">{{locale.monthNames[month.month]}}</span>
-                                <select tabindex="-1" class="ui-datepicker-month" *ngIf="monthNavigator && (view !== 'month') && numberOfMonths === 1" (change)="onMonthDropdownChange($event.target.value)">
-                                    <option [value]="i" *ngFor="let monthName of locale.monthNames;let i = index" [selected]="i === month.month">{{monthName}}</option>
-                                </select>
-                                <select tabindex="-1" class="ui-datepicker-year" *ngIf="yearNavigator && numberOfMonths === 1" (change)="onYearDropdownChange($event.target.value)">
-                                    <option [value]="year" *ngFor="let year of yearOptions" [selected]="year === currentYear">{{year}}</option>
-                                </select>
-                                <span class="ui-datepicker-year" *ngIf="!yearNavigator">{{view === 'month' ? currentYear : month.year}}</span>
+                    <div class="p-datepicker-group-container">
+                        <div class="p-datepicker-group" *ngFor="let month of months; let i = index;">
+                            <div class="p-datepicker-header">
+                                <button (keydown)="onContainerButtonKeydown($event)" class="p-datepicker-prev p-link" (click)="onPrevButtonClick($event)" *ngIf="i === 0" type="button" pRipple>
+                                    <span class="p-datepicker-prev-icon pi pi-chevron-left"></span>
+                                </button>
+                                <div class="p-datepicker-title">
+                                    <span class="p-datepicker-month" *ngIf="!monthNavigator && (view !== 'month')">{{getTranslation('monthNames')[month.month]}}</span>
+                                    <select tabindex="0" class="p-datepicker-month" *ngIf="monthNavigator && (view !== 'month') && numberOfMonths === 1" (change)="onMonthDropdownChange($event.target.value)">
+                                        <option [value]="i" *ngFor="let monthName of getTranslation('monthNames');let i = index" [selected]="i === month.month">{{monthName}}</option>
+                                    </select>
+                                    <select tabindex="0" class="p-datepicker-year" *ngIf="yearNavigator && numberOfMonths === 1" (change)="onYearDropdownChange($event.target.value)">
+                                        <option [value]="year" *ngFor="let year of yearOptions" [selected]="year === currentYear">{{year}}</option>
+                                    </select>
+                                    <span class="p-datepicker-year" *ngIf="!yearNavigator">{{view === 'month' ? currentYear : month.year}}</span>
+                                </div>
+                                <button (keydown)="onContainerButtonKeydown($event)" class="p-datepicker-next p-link" (click)="onNextButtonClick($event)" *ngIf="numberOfMonths === 1 ? true : (i === numberOfMonths -1)" type="button" pRipple>
+                                    <span class="p-datepicker-next-icon pi pi-chevron-right"></span>
+                                </button>
+                            </div>
+                            <div class="p-datepicker-calendar-container" *ngIf="view ==='date'">
+                                <table class="p-datepicker-calendar">
+                                    <thead>
+                                        <tr>
+                                            <th *ngIf="showWeek" class="p-datepicker-weekheader p-disabled">
+                                                <span>{{getTranslation('weekHeader')}}</span>
+                                            </th>
+                                            <th scope="col" *ngFor="let weekDay of weekDays;let begin = first; let end = last">
+                                                <span>{{weekDay}}</span>
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr *ngFor="let week of month.dates; let j = index;">
+                                            <td *ngIf="showWeek" class="p-datepicker-weeknumber">
+                                                <span class="p-disabled">
+                                                    {{month.weekNumbers[j]}}
+                                                </span>
+                                            </td>
+                                            <td *ngFor="let date of week" [ngClass]="{'p-datepicker-other-month': date.otherMonth,'p-datepicker-today':date.today}">
+                                                <ng-container *ngIf="date.otherMonth ? showOtherMonths : true">
+                                                    <span [ngClass]="{'p-highlight':isSelected(date), 'p-disabled': !date.selectable}"
+                                                        (click)="onDateSelect($event,date)" draggable="false" (keydown)="onDateCellKeydown($event,date,i)" pRipple>
+                                                        <ng-container *ngIf="!dateTemplate">{{date.day}}</ng-container>
+                                                        <ng-container *ngTemplateOutlet="dateTemplate; context: {$implicit: date}"></ng-container>
+                                                    </span>
+                                                </ng-container>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
-                        <div class="ui-datepicker-calendar-container" *ngIf="view ==='date'">
-                            <table class="ui-datepicker-calendar">
-                                <thead>
-                                    <tr>
-                                        <th *ngIf="showWeek" class="ui-datepicker-weekheader">
-                                            <span>{{locale['weekHeader']}}</span>
-                                        </th>
-                                        <th scope="col" *ngFor="let weekDay of weekDays;let begin = first; let end = last">
-                                            <span>{{weekDay}}</span>
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr *ngFor="let week of month.dates; let i = index;">
-                                        <td *ngIf="showWeek" class="ui-datepicker-weeknumber ui-state-disabled">
-                                            <span>
-                                                {{month.weekNumbers[i]}}
-                                            </span>
-                                        </td>
-                                        <td *ngFor="let date of week" [ngClass]="{'ui-datepicker-other-month': date.otherMonth,
-                                            'ui-datepicker-current-day':isSelected(date),'ui-datepicker-today':date.today}">
-                                            <ng-container *ngIf="date.otherMonth ? showOtherMonths : true">
-                                                <a class="ui-state-default" *ngIf="date.selectable" [ngClass]="{'ui-state-active':isSelected(date), 'ui-state-highlight':date.today}"
-                                                    (click)="onDateSelect($event,date)" draggable="false">
-                                                    <ng-container *ngIf="!dateTemplate">{{date.day}}</ng-container>
-                                                    <ng-container *ngTemplateOutlet="dateTemplate; context: {$implicit: date}"></ng-container>
-                                                </a>
-                                                <span class="ui-state-default ui-state-disabled" [ngClass]="{'ui-state-active':isSelected(date), 'ui-state-highlight':date.today}" *ngIf="!date.selectable">
-                                                    {{date.day}}
-                                                </span>
-                                            </ng-container>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
                     </div>
-                    <div class="ui-monthpicker" *ngIf="view === 'month'">
-                        <a  *ngFor="let m of monthPickerValues; let i = index" (click)="onMonthSelect($event, i)" class="ui-monthpicker-month" [ngClass]="{'ui-state-active': isMonthSelected(i)}">
+                    <div class="p-monthpicker" *ngIf="view === 'month'">
+                        <span *ngFor="let m of monthPickerValues; let i = index" (click)="onMonthSelect($event, i)" (keydown)="onMonthCellKeydown($event,i)" class="p-monthpicker-month" [ngClass]="{'p-highlight': isMonthSelected(i), 'p-disabled':!isSelectable(1, i, this.currentYear, false)}" pRipple>
                             {{m}}
-                        </a>
+                        </span>
                     </div>
                 </ng-container>
-                <div class="ui-timepicker ui-widget-header ui-corner-all" *ngIf="showTime||timeOnly">
-                    <div class="ui-hour-picker">
-                        <a  (mousedown)="onTimePickerElementMouseDown($event, 0, 1)" (mouseup)="onTimePickerElementMouseUp($event)" (mouseout)="onTimePickerElementMouseOut($event)">
+                <div class="p-timepicker" *ngIf="showTime||timeOnly">
+                    <div class="p-hour-picker">
+                        <button class="p-link" type="button" (keydown)="onContainerButtonKeydown($event)" (keydown.enter)="incrementHour($event)" (mousedown)="onTimePickerElementMouseDown($event, 0, 1)" (mouseup)="onTimePickerElementMouseUp($event)" (mouseout)="onTimePickerElementMouseOut($event)" pRipple>
                             <span class="pi pi-chevron-up"></span>
-                        </a>
-                        <span [ngStyle]="{'display': currentHour < 10 ? 'inline': 'none'}">0</span><span>{{currentHour}}</span>
-                        <a  (mousedown)="onTimePickerElementMouseDown($event, 0, -1)" (mouseup)="onTimePickerElementMouseUp($event)" (mouseout)="onTimePickerElementMouseOut($event)">
+                        </button>
+                        <span><ng-container *ngIf="currentHour < 10">0</ng-container>{{currentHour}}</span>
+                        <button class="p-link" type="button" (keydown)="onContainerButtonKeydown($event)" (keydown.enter)="decrementHour($event)" (mousedown)="onTimePickerElementMouseDown($event, 0, -1)" (mouseup)="onTimePickerElementMouseUp($event)" (mouseout)="onTimePickerElementMouseOut($event)" pRipple>
                             <span class="pi pi-chevron-down"></span>
-                        </a>
+                        </button>
                     </div>
-                    <div class="ui-separator">
-                        <a >
-                            <span class="pi pi-chevron-up"></span>
-                        </a>
+                    <div class="p-separator">
                         <span>{{timeSeparator}}</span>
-                        <a >
-                            <span class="pi pi-chevron-down"></span>
-                        </a>
                     </div>
-                    <div class="ui-minute-picker">
-                        <a  (mousedown)="onTimePickerElementMouseDown($event, 1, 1)" (mouseup)="onTimePickerElementMouseUp($event)" (mouseout)="onTimePickerElementMouseOut($event)">
+                    <div class="p-minute-picker">
+                        <button class="p-link" type="button" (keydown)="onContainerButtonKeydown($event)" (keydown.enter)="incrementMinute($event)" (mousedown)="onTimePickerElementMouseDown($event, 1, 1)" (mouseup)="onTimePickerElementMouseUp($event)" (mouseout)="onTimePickerElementMouseOut($event)" pRipple>
                             <span class="pi pi-chevron-up"></span>
-                        </a>
-                        <span [ngStyle]="{'display': currentMinute < 10 ? 'inline': 'none'}">0</span><span>{{currentMinute}}</span>
-                        <a  (mousedown)="onTimePickerElementMouseDown($event, 1, -1)" (mouseup)="onTimePickerElementMouseUp($event)" (mouseout)="onTimePickerElementMouseOut($event)">
+                        </button>
+                        <span><ng-container *ngIf="currentMinute < 10">0</ng-container>{{currentMinute}}</span>
+                        <button class="p-link" type="button" (keydown)="onContainerButtonKeydown($event)" (keydown.enter)="decrementMinute($event)" (mousedown)="onTimePickerElementMouseDown($event, 1, -1)" (mouseup)="onTimePickerElementMouseUp($event)" (mouseout)="onTimePickerElementMouseOut($event)" pRipple>
                             <span class="pi pi-chevron-down"></span>
-                        </a>
+                        </button>
                     </div>
-                    <div class="ui-separator" *ngIf="showSeconds">
-                        <a >
-                            <span class="pi pi-chevron-up"></span>
-                        </a>
+                    <div class="p-separator" *ngIf="showSeconds">
                         <span>{{timeSeparator}}</span>
-                        <a >
-                            <span class="pi pi-chevron-down"></span>
-                        </a>
                     </div>
-                    <div class="ui-second-picker" *ngIf="showSeconds">
-                        <a  (mousedown)="onTimePickerElementMouseDown($event, 2, 1)" (mouseup)="onTimePickerElementMouseUp($event)" (mouseout)="onTimePickerElementMouseOut($event)">
+                    <div class="p-second-picker" *ngIf="showSeconds">
+                        <button class="p-link" type="button" (keydown)="onContainerButtonKeydown($event)" (keydown.enter)="incrementSecond($event)" (mousedown)="onTimePickerElementMouseDown($event, 2, 1)" (mouseup)="onTimePickerElementMouseUp($event)" (mouseout)="onTimePickerElementMouseOut($event)" pRipple>
                             <span class="pi pi-chevron-up"></span>
-                        </a>
-                        <span [ngStyle]="{'display': currentSecond < 10 ? 'inline': 'none'}">0</span><span>{{currentSecond}}</span>
-                        <a  (mousedown)="onTimePickerElementMouseDown($event, 2, -1)" (mouseup)="onTimePickerElementMouseUp($event)" (mouseout)="onTimePickerElementMouseOut($event)">
+                        </button>
+                        <span><ng-container *ngIf="currentSecond < 10">0</ng-container>{{currentSecond}}</span>
+                        <button class="p-link" type="button" (keydown)="onContainerButtonKeydown($event)" (keydown.enter)="decrementSecond($event)" (mousedown)="onTimePickerElementMouseDown($event, 2, -1)" (mouseup)="onTimePickerElementMouseUp($event)" (mouseout)="onTimePickerElementMouseOut($event)" pRipple>
                             <span class="pi pi-chevron-down"></span>
-                        </a>
+                        </button>
                     </div>
-                    <div class="ui-ampm-picker" *ngIf="hourFormat=='12'">
-                        <a  (click)="toggleAMPM($event)">
+                    <div class="p-ampm-picker" *ngIf="hourFormat=='12'">
+                        <button class="p-link" type="button" (keydown)="onContainerButtonKeydown($event)" (click)="toggleAMPM($event)" (keydown.enter)="toggleAMPM($event)" pRipple>
                             <span class="pi pi-chevron-up"></span>
-                        </a>
+                        </button>
                         <span>{{pm ? 'PM' : 'AM'}}</span>
-                        <a  (click)="toggleAMPM($event)">
+                        <button class="p-link" type="button" (keydown)="onContainerButtonKeydown($event)" (click)="toggleAMPM($event)" (keydown.enter)="toggleAMPM($event)" pRipple>
                             <span class="pi pi-chevron-down"></span>
-                        </a>
+                        </button>
                     </div>
                 </div>
-                <div class="ui-datepicker-buttonbar ui-widget-header" *ngIf="showButtonBar">
-                    <div class="ui-g">
-                        <div class="ui-g-6">
-                            <button type="button" tabindex="-1" [label]="_locale.today" (click)="onTodayButtonClick($event)" pButton [ngClass]="[todayButtonStyleClass]"></button>
-                        </div>
-                        <div class="ui-g-6">
-                            <button type="button" tabindex="-1" [label]="_locale.clear" (click)="onClearButtonClick($event)" pButton [ngClass]="[clearButtonStyleClass]"></button>
-                        </div>
-                    </div>
+                <div class="p-datepicker-buttonbar" *ngIf="showButtonBar">
+                    <button type="button" [label]="getTranslation('today')" (keydown)="onContainerButtonKeydown($event)" (click)="onTodayButtonClick($event)" pButton pRipple [ngClass]="[todayButtonStyleClass]"></button>
+                    <button type="button" [label]="getTranslation('clear')" (keydown)="onContainerButtonKeydown($event)" (click)="onClearButtonClick($event)" pButton pRipple [ngClass]="[clearButtonStyleClass]"></button>
                 </div>
                 <ng-content select="p-footer"></ng-content>
+                <ng-container *ngTemplateOutlet="footerTemplate"></ng-container>
             </div>
         </span>
     `,
     animations: [
         trigger('overlayAnimation', [
-            state('visible', style({
-                transform: 'translateY(0)',
-                opacity: 1
-            })),
             state('visibleTouchUI', style({
                 transform: 'translate(-50%,-50%)',
                 opacity: 1
             })),
             transition('void => visible', [
-                style({transform: 'translateY(5%)', opacity: 0}),
-                animate('{{showTransitionParams}}')
+                style({opacity: 0, transform: 'scaleY(0.8)'}),
+                animate('{{showTransitionParams}}', style({ opacity: 1, transform: '*' }))
             ]),
             transition('visible => void', [
-                animate(('{{hideTransitionParams}}'), 
-                style({
-                    opacity: 0,
-                    transform: 'translateY(5%)'
-                }))
+                animate('{{hideTransitionParams}}', style({ opacity: 0 }))
             ]),
             transition('void => visibleTouchUI', [
                 style({opacity: 0, transform: 'translate3d(-50%, -40%, 0) scale(0.9)'}),
                 animate('{{showTransitionParams}}')
             ]),
             transition('visibleTouchUI => void', [
-                animate(('{{hideTransitionParams}}'), 
+                animate(('{{hideTransitionParams}}'),
                 style({
                     opacity: 0,
                     transform: 'translate3d(-50%, -40%, 0) scale(0.9)'
@@ -211,67 +187,70 @@ export interface LocaleSettings {
         ])
     ],
     host: {
-        '[class.ui-inputwrapper-filled]': 'filled',
-        '[class.ui-inputwrapper-focus]': 'focus'
+        '[class.p-inputwrapper-filled]': 'filled',
+        '[class.p-inputwrapper-focus]': 'focus'
     },
-    providers: [CALENDAR_VALUE_ACCESSOR]
+    providers: [CALENDAR_VALUE_ACCESSOR],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    encapsulation: ViewEncapsulation.None,
+    styleUrls: ['./calendar.css']
 })
 export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
-    
-    @Input() defaultDate: Date;
-    
+
     @Input() style: any;
-    
+
     @Input() styleClass: string;
-    
+
     @Input() inputStyle: any;
 
     @Input() inputId: string;
-    
+
     @Input() name: string;
-    
+
     @Input() inputStyleClass: string;
-    
+
     @Input() placeholder: string;
-    
+
+    @Input() ariaLabelledBy: string;
+
     @Input() disabled: any;
-    
+
     @Input() dateFormat: string = 'mm/dd/yy';
 
     @Input() multipleSeparator: string = ',';
 
     @Input() rangeSeparator: string = '-';
-    
+
     @Input() inline: boolean = false;
-    
+
     @Input() showOtherMonths: boolean = true;
 
     @Input() selectOtherMonths: boolean;
-    
+
     @Input() showIcon: boolean;
-    
+
     @Input() icon: string = 'pi pi-calendar';
-    
+
     @Input() appendTo: any;
-    
+
     @Input() readonlyInput: boolean;
-    
+
     @Input() shortYearCutoff: any = '+10';
-    
+
     @Input() monthNavigator: boolean;
 
     @Input() yearNavigator: boolean;
-    
+
     @Input() hourFormat: string = '24';
-    
+
     @Input() timeOnly: boolean;
-    
+
     @Input() stepHour: number = 1;
-    
+
     @Input() stepMinute: number = 1;
-    
+
     @Input() stepSecond: number = 1;
-    
+
     @Input() showSeconds: boolean = false;
 
     @Input() required: boolean;
@@ -279,160 +258,209 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
     @Input() showOnFocus: boolean = true;
 
     @Input() showWeek: boolean = false;
-    
+
     @Input() dataType: string = 'date';
-    
+
     @Input() selectionMode: string = 'single';
-    
+
     @Input() maxDateCount: number;
-    
+
     @Input() showButtonBar: boolean;
-    
-    @Input() todayButtonStyleClass: string = 'ui-button-secondary';
-    
-    @Input() clearButtonStyleClass: string = 'ui-button-secondary';
-    
+
+    @Input() todayButtonStyleClass: string = 'p-button-text';
+
+    @Input() clearButtonStyleClass: string = 'p-button-text';
+
     @Input() autoZIndex: boolean = true;
-    
+
     @Input() baseZIndex: number = 0;
 
     @Input() panelStyleClass: string;
-    
+
     @Input() panelStyle: any;
-  
+
     @Input() keepInvalid: boolean = false;
 
-    @Input() hideOnDateTimeSelect: boolean = false;
+    @Input() hideOnDateTimeSelect: boolean = true;
 
     @Input() numberOfMonths: number = 1;
-    
+
     @Input() view: string = 'date';
 
     @Input() touchUI: boolean;
 
     @Input() timeSeparator: string = ":";
 
-    @Input() showTransitionOptions: string = '225ms ease-out';
+    @Input() focusTrap: boolean = true;
 
-    @Input() hideTransitionOptions: string = '195ms ease-in';
-    
+    @Input() firstDayOfWeek: number = 0;
+
+    @Input() showTransitionOptions: string = '.12s cubic-bezier(0, 0, 0.2, 1)';
+
+    @Input() hideTransitionOptions: string = '.1s linear';
+
     @Output() onFocus: EventEmitter<any> = new EventEmitter();
-    
+
     @Output() onBlur: EventEmitter<any> = new EventEmitter();
-    
+
     @Output() onClose: EventEmitter<any> = new EventEmitter();
-    
+
     @Output() onSelect: EventEmitter<any> = new EventEmitter();
-    
+
     @Output() onInput: EventEmitter<any> = new EventEmitter();
-    
+
     @Output() onTodayClick: EventEmitter<any> = new EventEmitter();
-    
+
     @Output() onClearClick: EventEmitter<any> = new EventEmitter();
-    
+
     @Output() onMonthChange: EventEmitter<any> = new EventEmitter();
-    
+
     @Output() onYearChange: EventEmitter<any> = new EventEmitter();
-    
+
+    @Output() onClickOutside: EventEmitter<any> = new EventEmitter();
+
+    @Output() onShow: EventEmitter<any> = new EventEmitter();
+
     @ContentChildren(PrimeTemplate) templates: QueryList<any>;
-    
-    _locale: LocaleSettings = {
-        firstDayOfWeek: 0,
-        dayNames: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
-        dayNamesShort: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
-        dayNamesMin: ["Su","Mo","Tu","We","Th","Fr","Sa"],
-        monthNames: [ "January","February","March","April","May","June","July","August","September","October","November","December" ],
-        monthNamesShort: [ "Jan", "Feb", "Mar", "Apr", "May", "Jun","Jul", "Aug", "Sep", "Oct", "Nov", "Dec" ],
-        today: 'Today',
-        clear: 'Clear',
-        dateFormat: 'mm/dd/yy',
-        weekHeader: 'Wk'
-    };
-    
+
     @Input() tabindex: number;
 
+    @ViewChild('container', { static: false }) containerViewChild: ElementRef;
+
     @ViewChild('inputfield', { static: false }) inputfieldViewChild: ElementRef;
-            
+
+    @ViewChild('contentWrapper', { static: false }) set content (content: ElementRef) {
+        this.contentViewChild = content;
+
+        if (this.contentViewChild) {
+            if (this.isMonthNavigate) {
+                Promise.resolve(null).then(() => this.updateFocus());
+                this.isMonthNavigate = false;
+            }
+            else {
+                this.initFocusableCell();
+            }
+        }
+    };
+
+    contentViewChild: ElementRef;
+
     value: any;
-    
+
     dates: any[];
 
     months: any[];
 
     monthPickerValues: any[];
-    
+
     weekDays: string[];
-    
+
     currentMonth: number;
-    
+
     currentYear: number;
-    
+
     currentHour: number;
-    
+
     currentMinute: number;
-    
+
     currentSecond: number;
-    
+
     pm: boolean;
 
     mask: HTMLDivElement;
 
     maskClickListener: Function;
-    
+
     overlay: HTMLDivElement;
-    
+
     overlayVisible: boolean;
-            
+
     onModelChange: Function = () => {};
-    
+
     onModelTouched: Function = () => {};
-    
+
     calendarElement: any;
-    
+
     timePickerTimer:any;
-    
+
     documentClickListener: any;
-    
+
     ticksTo1970: number;
-    
+
     yearOptions: number[];
-    
+
     focus: boolean;
-    
+
     isKeydown: boolean;
-    
+
     filled: boolean;
 
     inputFieldValue: string = null;
-    
+
     _minDate: Date;
-    
+
     _maxDate: Date;
-    
+
     _showTime: boolean;
 
     _yearRange: string;
-    
+
     preventDocumentListener: boolean;
-    
+
     dateTemplate: TemplateRef<any>;
-    
+
+    headerTemplate: TemplateRef<any>;
+
+    footerTemplate: TemplateRef<any>;
+
+    disabledDateTemplate: TemplateRef<any>;
+
     _disabledDates: Array<Date>;
-    
+
     _disabledDays: Array<number>;
-    
+
     selectElement: any;
-    
+
     todayElement: any;
-    
+
     focusElement: any;
 
+    scrollHandler: any;
+
     documentResizeListener: any;
+
+    navigationState: any = null;
+
+    isMonthNavigate: boolean;
+
+    initialized: boolean;
+
+    translationSubscription: Subscription;
+
+    _locale: LocaleSettings;
+
+    @Input() get defaultDate(): Date {
+        return this._defaultDate;
+    };
+
+    set defaultDate(defaultDate: Date) {
+        this._defaultDate = defaultDate;
+        
+        if (this.initialized) {
+            const date = defaultDate||new Date();
+            this.currentMonth = date.getMonth();
+            this.currentYear = date.getFullYear();
+            this.initTime(date);
+            this.createMonths(this.currentMonth, this.currentYear);
+        }
+    }
+
+    _defaultDate: Date;
 
     @Input() get minDate(): Date {
         return this._minDate;
     }
-    
+
     set minDate(date: Date) {
         this._minDate = date;
 
@@ -440,23 +468,23 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
             this.createMonths(this.currentMonth, this.currentYear);
         }
     }
-    
+
     @Input() get maxDate(): Date {
         return this._maxDate;
     }
-    
+
     set maxDate(date: Date) {
         this._maxDate = date;
-      
+
         if (this.currentMonth != undefined && this.currentMonth != null  && this.currentYear) {
             this.createMonths(this.currentMonth, this.currentYear);
         }
     }
-    
+
     @Input() get disabledDates(): Date[] {
         return this._disabledDates;
     }
-    
+
     set disabledDates(disabledDates: Date[]) {
         this._disabledDates = disabledDates;
         if (this.currentMonth != undefined && this.currentMonth != null  && this.currentYear) {
@@ -464,11 +492,11 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
             this.createMonths(this.currentMonth, this.currentYear);
         }
     }
-    
+
     @Input() get disabledDays(): number[] {
         return this._disabledDays;
     }
-    
+
     set disabledDays(disabledDays: number[]) {
         this._disabledDays = disabledDays;
 
@@ -476,19 +504,19 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
             this.createMonths(this.currentMonth, this.currentYear);
         }
     }
-    
+
     @Input() get yearRange(): string {
         return this._yearRange;
     }
 
     set yearRange(yearRange: string) {
         this._yearRange = yearRange;
-        
+
         if (yearRange) {
             const years = yearRange.split(':');
             const yearStart = parseInt(years[0]);
             const yearEnd = parseInt(years[1]);
-            
+
             this.populateYearOptions(yearStart, yearEnd);
         }
     }
@@ -496,34 +524,26 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
     @Input() get showTime(): boolean {
         return this._showTime;
     }
-    
+
     set showTime(showTime: boolean) {
         this._showTime = showTime;
-        
+
         if (this.currentHour === undefined) {
             this.initTime(this.value||new Date());
         }
         this.updateInputfield();
     }
-    
+
     get locale() {
        return this._locale;
     }
 
     @Input()
     set locale(newLocale: LocaleSettings) {
-       this._locale = newLocale;
-
-        if (this.view === 'date') {
-            this.createWeekDays();
-            this.createMonths(this.currentMonth, this.currentYear);
-       }
-       else if (this.view === 'month') {
-            this.createMonthPickerValues();
-       }
+        console.warn("Locale property has no effect, use new i18n API instead.");
     }
 
-    constructor(public el: ElementRef, public renderer: Renderer2, public cd: ChangeDetectorRef, private zone: NgZone) {}
+    constructor(public el: ElementRef, public renderer: Renderer2, public cd: ChangeDetectorRef, private zone: NgZone, private config: PrimeNGConfig) {}
 
     ngOnInit() {
         const date = this.defaultDate||new Date();
@@ -539,6 +559,12 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
         else if (this.view === 'month') {
             this.createMonthPickerValues();
         }
+
+        this.translationSubscription = this.config.translationObserver.subscribe(() => {
+            this.createWeekDays();
+        });
+
+        this.initialized = true;
     }
 
     ngAfterContentInit() {
@@ -547,12 +573,28 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
                 case 'date':
                     this.dateTemplate = item.template;
                 break;
-                
+
+                case 'disabledDate':
+                    this.disabledDateTemplate = item.template;
+                break;
+
+                case 'header':
+                    this.headerTemplate = item.template;
+                break;
+
+                case 'footer':
+                    this.footerTemplate = item.template;
+                break;
+
                 default:
                     this.dateTemplate = item.template;
                 break;
             }
         });
+    }
+
+    getTranslation(option: string) {
+        return this.config.getTranslation(option);
     }
 
     populateYearOptions(start, end) {
@@ -565,17 +607,19 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
 
     createWeekDays() {
         this.weekDays = [];
-        let dayIndex = this.locale.firstDayOfWeek;
+        let dayIndex = this.firstDayOfWeek;
+        let dayLabels = this.getTranslation(TranslationKeys.DAY_NAMES_MIN);
         for (let i = 0; i < 7; i++) {
-            this.weekDays.push(this.locale.dayNamesMin[dayIndex]);
+            this.weekDays.push(dayLabels[dayIndex]);
             dayIndex = (dayIndex == 6) ? 0 : ++dayIndex;
         }
     }
 
     createMonthPickerValues() {
         this.monthPickerValues = [];
+        let monthLabels = this.getTranslation(TranslationKeys.MONTH_NAMES_SHORT);
         for (let i = 0; i <= 11; i++) {
-            this.monthPickerValues.push(this.locale.monthNamesShort[i]);
+            this.monthPickerValues.push(monthLabels[i]);
         }
     }
 
@@ -601,7 +645,7 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
 		checkDate.setDate( 1 );
 		return Math.floor( Math.round((time - checkDate.getTime()) / 86400000 ) / 7 ) + 1;
     }
-    
+
     createMonth(month: number, year: number) {
         let dates = [];
         let firstDay = this.getFirstDayOfMonthIndex(month, year);
@@ -614,14 +658,14 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
 
         for (let i = 0; i < monthRows; i++) {
             let week = [];
-            
+
             if (i == 0) {
                 for (let j = (prevMonthDaysLength - firstDay + 1); j <= prevMonthDaysLength; j++) {
                     let prev = this.getPreviousMonthAndYear(month, year);
                     week.push({day: j, month: prev.month, year: prev.year, otherMonth: true,
                             today: this.isToday(today, j, prev.month, prev.year), selectable: this.isSelectable(j, prev.month, prev.year, true)});
                 }
-                
+
                 let remainingDaysLength = 7 - week.length;
                 for (let j = 0; j < remainingDaysLength; j++) {
                     week.push({day: dayNo, month: month, year: year, today: this.isToday(today, dayNo, month, year),
@@ -641,13 +685,13 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
                         week.push({day: dayNo, month: month, year: year, today: this.isToday(today, dayNo, month, year),
                             selectable: this.isSelectable(dayNo, month, year, false)});
                     }
-                    
+
                     dayNo++;
                 }
             }
-            
+
             if (this.showWeek) {
-                weekNumbers.push(this.getWeekNumber(new Date(week[0].year, week[0].month, week[0].day))); 
+                weekNumbers.push(this.getWeekNumber(new Date(week[0].year, week[0].month, week[0].day)));
             }
 
             dates.push(week);
@@ -660,18 +704,14 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
             weekNumbers: weekNumbers
         };
     }
-    
+
     initTime(date: Date) {
         this.pm = date.getHours() > 11;
 
         if (this.showTime) {
             this.currentMinute = date.getMinutes();
             this.currentSecond = date.getSeconds();
-            
-            if (this.hourFormat == '12')
-                this.currentHour = date.getHours() == 0 ? 12 : date.getHours() % 12;
-            else
-                this.currentHour = date.getHours();
+            this.setCurrentHourPM(date.getHours());
         }
         else if (this.timeOnly) {
             this.currentMinute = 0;
@@ -679,17 +719,22 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
             this.currentSecond = 0;
         }
     }
-    
+
     navBackward(event) {
         event.stopPropagation();
-        
+
         if (this.disabled) {
             event.preventDefault();
             return;
         }
 
+        this.isMonthNavigate = true;
+
         if (this.view === 'month') {
             this.decrementYear();
+            setTimeout(()=> {
+                this.updateFocus();
+            },1);
         }
         else {
             if (this.currentMonth === 0) {
@@ -699,12 +744,12 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
             else {
                 this.currentMonth--;
             }
-            
+
             this.onMonthChange.emit({ month: this.currentMonth + 1, year: this.currentYear });
             this.createMonths(this.currentMonth, this.currentYear);
         }
     }
-    
+
     navForward(event) {
         event.stopPropagation();
 
@@ -713,8 +758,13 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
             return;
         }
 
+        this.isMonthNavigate = true;
+
         if (this.view === 'month') {
             this.incrementYear();
+            setTimeout(()=> {
+                this.updateFocus();
+            },1);
         }
         else {
             if (this.currentMonth === 11) {
@@ -724,7 +774,7 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
             else {
                 this.currentMonth++;
             }
-            
+
             this.onMonthChange.emit({month: this.currentMonth + 1, year: this.currentYear});
             this.createMonths(this.currentMonth, this.currentYear);
         }
@@ -732,7 +782,7 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
 
     decrementYear() {
         this.currentYear--;
-        
+
         if (this.yearNavigator && this.currentYear < this.yearOptions[0]) {
             let difference = this.yearOptions[this.yearOptions.length - 1] - this.yearOptions[0];
             this.populateYearOptions(this.yearOptions[0] - difference, this.yearOptions[this.yearOptions.length - 1] - difference);
@@ -741,40 +791,35 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
 
     incrementYear() {
         this.currentYear++;
-        
+
         if (this.yearNavigator && this.currentYear > this.yearOptions[this.yearOptions.length - 1]) {
             let difference = this.yearOptions[this.yearOptions.length - 1] - this.yearOptions[0];
             this.populateYearOptions(this.yearOptions[0] + difference, this.yearOptions[this.yearOptions.length - 1] + difference);
         }
     }
-    
+
     onDateSelect(event, dateMeta) {
         if (this.disabled || !dateMeta.selectable) {
             event.preventDefault();
             return;
         }
-        
+
         if (this.isMultipleSelection() && this.isSelected(dateMeta)) {
             this.value = this.value.filter((date, i) => {
                 return !this.isDateEquals(date, dateMeta);
             });
+            if (this.value.length === 0) {
+                this.value = null;
+            }
             this.updateModel(this.value);
         }
         else {
             if (this.shouldSelectDate(dateMeta)) {
-                if (dateMeta.otherMonth) {
-                    this.currentMonth = dateMeta.month;
-                    this.currentYear = dateMeta.year;
-                    this.createMonths(this.currentMonth, this.currentYear);
-                    this.selectDate(dateMeta);
-                }
-                else {
-                     this.selectDate(dateMeta);
-                }
+                this.selectDate(dateMeta);
             }
         }
-        
-        if (this.isSingleSelection() && (!this.showTime || this.hideOnDateTimeSelect)) {
+
+        if (this.isSingleSelection() && this.hideOnDateTimeSelect) {
             setTimeout(() => {
                 event.preventDefault();
                 this.hideOverlay();
@@ -790,7 +835,7 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
         this.updateInputfield();
         event.preventDefault();
     }
-    
+
     shouldSelectDate(dateMeta) {
         if (this.isMultipleSelection())
             return this.maxDateCount != null ? this.maxDateCount > (this.value ? this.value.length : 0) : true;
@@ -799,9 +844,11 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
     }
 
     onMonthSelect(event, index) {
-        this.onDateSelect(event, {year: this.currentYear, month: index, day: 1, selectable: true});
+        if (!DomHandler.hasClass(event.target, 'p-disabled')) {
+            this.onDateSelect(event, {year: this.currentYear, month: index, day: 1, selectable: true});
+        }
     }
-    
+
     updateInputfield() {
         let formattedValue = '';
 
@@ -822,7 +869,7 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
                 if (this.value && this.value.length) {
                     let startDate = this.value[0];
                     let endDate = this.value[1];
-                    
+
                     formattedValue = this.formatDateTime(startDate);
                     if (endDate) {
                         formattedValue += ' '+this.rangeSeparator +' ' + this.formatDateTime(endDate);
@@ -830,14 +877,14 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
                 }
             }
         }
-        
+
         this.inputFieldValue = formattedValue;
         this.updateFilledState();
         if (this.inputfieldViewChild && this.inputfieldViewChild.nativeElement) {
             this.inputfieldViewChild.nativeElement.value = this.inputFieldValue;
         }
     }
-    
+
     formatDateTime(date) {
         let formattedValue = null;
         if (date) {
@@ -851,13 +898,28 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
                 }
             }
         }
-        
+
         return formattedValue;
     }
-    
+
+    setCurrentHourPM(hours: number) {
+        if (this.hourFormat == '12') {
+            this.pm = hours > 11;
+            if (hours >= 12) {
+                this.currentHour = (hours == 12) ? 12 : hours - 12;
+            }
+            else {
+                this.currentHour = (hours == 0) ? 12 : hours;
+            }
+        }
+        else {
+            this.currentHour = hours;
+        }
+    }
+
     selectDate(dateMeta) {
         let date = new Date(dateMeta.year, dateMeta.month, dateMeta.day);
-        
+
         if (this.showTime) {
             if (this.hourFormat == '12') {
                 if (this.currentHour === 12)
@@ -872,21 +934,21 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
             date.setMinutes(this.currentMinute);
             date.setSeconds(this.currentSecond);
         }
-        
+
         if (this.minDate && this.minDate > date) {
             date = this.minDate;
-            this.currentHour = date.getHours();
+            this.setCurrentHourPM(date.getHours());
             this.currentMinute = date.getMinutes();
             this.currentSecond = date.getSeconds();
         }
-        
+
         if (this.maxDate && this.maxDate < date) {
             date = this.maxDate;
-            this.currentHour = date.getHours();
+            this.setCurrentHourPM(date.getHours());
             this.currentMinute = date.getMinutes();
             this.currentSecond = date.getSeconds();
         }
-        
+
         if (this.isSingleSelection()) {
             this.updateModel(date);
         }
@@ -897,7 +959,7 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
             if (this.value && this.value.length) {
                 let startDate = this.value[0];
                 let endDate = this.value[1];
-                
+
                 if (!endDate && date.getTime() >= startDate.getTime()) {
                     endDate = date;
                 }
@@ -905,20 +967,20 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
                     startDate = date;
                     endDate = null;
                 }
-                
+
                 this.updateModel([startDate, endDate]);
             }
             else {
                 this.updateModel([date, null]);
             }
         }
-        
+
         this.onSelect.emit(date);
     }
-    
+
     updateModel(value) {
         this.value = value;
-        
+
         if (this.dataType == 'date') {
             this.onModelChange(this.value);
         }
@@ -935,29 +997,29 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
             }
         }
     }
-    
+
     getFirstDayOfMonthIndex(month: number, year: number) {
         let day = new Date();
         day.setDate(1);
         day.setMonth(month);
         day.setFullYear(year);
-        
+
         let dayIndex = day.getDay() + this.getSundayIndex();
         return dayIndex >= 7 ? dayIndex - 7 : dayIndex;
     }
-    
+
     getDaysCountInMonth(month: number, year: number) {
         return 32 - this.daylightSavingAdjust(new Date(year, month, 32)).getDate();
     }
-    
+
     getDaysCountInPrevMonth(month: number, year: number) {
         let prev = this.getPreviousMonthAndYear(month, year);
         return this.getDaysCountInMonth(prev.month, prev.year);
     }
-    
+
     getPreviousMonthAndYear(month: number, year: number) {
         let m, y;
-        
+
         if (month === 0) {
             m = 11;
             y = year - 1;
@@ -966,13 +1028,13 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
             m = month - 1;
             y = year;
         }
-        
+
         return {'month':m,'year':y};
     }
-    
+
     getNextMonthAndYear(month: number, year: number) {
         let m, y;
-        
+
         if (month === 11) {
             m = 0;
             y = year + 1;
@@ -981,14 +1043,14 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
             m = month + 1;
             y = year;
         }
-        
+
         return {'month':m,'year':y};
     }
-    
+
     getSundayIndex() {
-        return this.locale.firstDayOfWeek > 0 ? 7 - this.locale.firstDayOfWeek : 0;
+        return this.firstDayOfWeek > 0 ? 7 - this.firstDayOfWeek : 0;
     }
-    
+
     isSelected(dateMeta): boolean {
         if (this.value) {
             if (this.isSingleSelection()) {
@@ -1002,7 +1064,7 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
                         break;
                     }
                 }
-                
+
                 return selected;
             }
             else if (this.isRangeSelection()) {
@@ -1018,43 +1080,43 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
     }
 
     isMonthSelected(month: number): boolean {
-        let day = this.value ? (Array.isArray(this.value) ? this.value[0].getDate() : this.value.getDate()) : 1; 
+        let day = this.value ? (Array.isArray(this.value) ? this.value[0].getDate() : this.value.getDate()) : 1;
         return this.isSelected({year: this.currentYear, month: month, day: day, selectable: true});
     }
-    
+
     isDateEquals(value, dateMeta) {
         if (value)
             return value.getDate() === dateMeta.day && value.getMonth() === dateMeta.month && value.getFullYear() === dateMeta.year;
         else
             return false;
     }
-    
+
     isDateBetween(start, end, dateMeta) {
         let between : boolean = false;
         if (start && end) {
             let date: Date = new Date(dateMeta.year, dateMeta.month, dateMeta.day);
             return start.getTime() <= date.getTime() && end.getTime() >= date.getTime();
         }
-        
+
         return between;
     }
-    
+
     isSingleSelection(): boolean {
         return this.selectionMode === 'single';
     }
-    
+
     isRangeSelection(): boolean {
         return this.selectionMode === 'range';
     }
-    
+
     isMultipleSelection(): boolean {
         return this.selectionMode === 'multiple';
     }
-    
+
     isToday(today, day, month, year): boolean {
         return today.getDate() === day && today.getMonth() === month && today.getFullYear() === year;
     }
-    
+
     isSelectable(day, month, year, otherMonth): boolean {
         let validMin = true;
         let validMax = true;
@@ -1064,7 +1126,7 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
         if (otherMonth && !this.selectOtherMonths) {
             return false;
         }
-        
+
         if (this.minDate) {
              if (this.minDate.getFullYear() > year) {
                  validMin = false;
@@ -1080,7 +1142,7 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
                  }
              }
         }
-        
+
         if (this.maxDate) {
              if (this.maxDate.getFullYear() < year) {
                  validMax = false;
@@ -1096,18 +1158,18 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
                  }
              }
         }
-        
+
         if (this.disabledDates) {
            validDate = !this.isDateDisabled(day,month,year);
         }
-       
+
         if (this.disabledDays) {
            validDay = !this.isDayDisabled(day,month,year)
         }
-        
+
         return validMin && validMax && validDate && validDay;
     }
-    
+
     isDateDisabled(day:number, month:number, year:number):boolean {
         if (this.disabledDates) {
             for (let disabledDate of this.disabledDates) {
@@ -1116,10 +1178,10 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
                 }
             }
         }
-        
+
         return false;
     }
-    
+
     isDayDisabled(day:number, month:number, year:number):boolean {
         if (this.disabledDays) {
             let weekday = new Date(year, month, day);
@@ -1128,7 +1190,7 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
         }
         return false;
     }
-    
+
     onInputFocus(event: Event) {
         this.focus = true;
         if (this.showOnFocus) {
@@ -1136,16 +1198,17 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
         }
         this.onFocus.emit(event);
     }
-    
-    onInputClick(event: Event) {
+
+    onInputClick() {
         if (this.overlay && this.autoZIndex) {
             this.overlay.style.zIndex = String(this.baseZIndex + (++DomHandler.zindex));
         }
+
         if (this.showOnFocus && !this.overlayVisible) {
             this.showOverlay();
         }
     }
-    
+
     onInputBlur(event: Event) {
         this.focus = false;
         this.onBlur.emit(event);
@@ -1154,7 +1217,7 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
         }
         this.onModelTouched();
     }
-    
+
     onButtonClick(event, inputfield) {
         if (!this.overlayVisible) {
             inputfield.focus();
@@ -1164,41 +1227,475 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
             this.hideOverlay();
         }
     }
-    
+
+    onPrevButtonClick(event) {
+        this.navigationState = {backward: true, button: true};
+        this.navBackward(event);
+    }
+
+    onNextButtonClick(event) {
+        this.navigationState = {backward: false, button: true};
+        this.navForward(event);
+    }
+
+    onContainerButtonKeydown(event) {
+        switch (event.which) {
+           //tab
+           case 9:
+                if (!this.inline) {
+                    this.trapFocus(event);
+                }
+           break;
+
+           //escape
+           case 27:
+               this.overlayVisible = false;
+               event.preventDefault();
+           break;
+
+           default:
+               //Noop
+           break;
+        }
+   }
+
     onInputKeydown(event) {
         this.isKeydown = true;
-        if (event.keyCode === 9) {
-            this.hideOverlay();
+        if (event.keyCode === 40 && this.contentViewChild) {
+            this.trapFocus(event);
+        }
+        else if (event.keyCode === 27) {
+            if (this.overlayVisible) {
+                this.overlayVisible = false;
+                event.preventDefault();
+            }
+        }
+        else if (event.keyCode === 13) {
+            if (this.overlayVisible) {
+                this.overlayVisible = false;
+                event.preventDefault();
+            }
+        }
+        else if (event.keyCode === 9 && this.contentViewChild) {
+            DomHandler.getFocusableElements(this.contentViewChild.nativeElement).forEach(el => el.tabIndex = '-1');
+            if (this.overlayVisible) {
+                this.overlayVisible = false;
+            }
         }
     }
-    
+
+    onDateCellKeydown(event, date, groupIndex) {
+        const cellContent = event.currentTarget;
+        const cell = cellContent.parentElement;
+
+        switch (event.which) {
+            //down arrow
+            case 40: {
+                cellContent.tabIndex = '-1';
+                let cellIndex = DomHandler.index(cell);
+                let nextRow = cell.parentElement.nextElementSibling;
+                if (nextRow) {
+                    let focusCell = nextRow.children[cellIndex].children[0];
+                    if (DomHandler.hasClass(focusCell, 'p-disabled')) {
+                        this.navigationState = {backward: false};
+                        this.navForward(event);
+                    }
+                    else {
+                        nextRow.children[cellIndex].children[0].tabIndex = '0';
+                        nextRow.children[cellIndex].children[0].focus();
+                    }
+                }
+                else {
+                    this.navigationState = {backward: false};
+                    this.navForward(event);
+                }
+                event.preventDefault();
+                break;
+            }
+
+            //up arrow
+            case 38: {
+                cellContent.tabIndex = '-1';
+                let cellIndex = DomHandler.index(cell);
+                let prevRow = cell.parentElement.previousElementSibling;
+                if (prevRow) {
+                    let focusCell = prevRow.children[cellIndex].children[0];
+                    if (DomHandler.hasClass(focusCell, 'p-disabled')) {
+                        this.navigationState = {backward: true};
+                        this.navBackward(event);
+                    }
+                    else {
+                        focusCell.tabIndex = '0';
+                        focusCell.focus();
+                    }
+                }
+                else {
+                    this.navigationState = {backward: true};
+                    this.navBackward(event);
+                }
+                event.preventDefault();
+                break;
+            }
+
+            //left arrow
+            case 37: {
+                cellContent.tabIndex = '-1';
+                let prevCell = cell.previousElementSibling;
+                if (prevCell) {
+                    let focusCell = prevCell.children[0];
+                    if (DomHandler.hasClass(focusCell, 'p-disabled') || DomHandler.hasClass(focusCell.parentElement, 'p-datepicker-weeknumber')) {
+                        this.navigateToMonth(true, groupIndex);
+                    }
+                    else {
+                        focusCell.tabIndex = '0';
+                        focusCell.focus();
+                    }
+                }
+                else {
+                    this.navigateToMonth(true, groupIndex);
+                }
+                event.preventDefault();
+                break;
+            }
+
+            //right arrow
+            case 39: {
+                cellContent.tabIndex = '-1';
+                let nextCell = cell.nextElementSibling;
+                if (nextCell) {
+                    let focusCell = nextCell.children[0];
+                    if (DomHandler.hasClass(focusCell, 'p-disabled')) {
+                        this.navigateToMonth(false, groupIndex);
+                    }
+                    else {
+                        focusCell.tabIndex = '0';
+                        focusCell.focus();
+                    }
+                }
+                else {
+                    this.navigateToMonth(false, groupIndex);
+                }
+                event.preventDefault();
+                break;
+            }
+
+            //enter
+            case 13: {
+                this.onDateSelect(event, date);
+                event.preventDefault();
+                break;
+            }
+
+            //escape
+            case 27: {
+                this.overlayVisible = false;
+                event.preventDefault();
+                break;
+            }
+
+            //tab
+            case 9: {
+                if (!this.inline) {
+                    this.trapFocus(event);
+                }
+                break;
+            }
+
+            default:
+                //no op
+            break;
+        }
+    }
+
+    onMonthCellKeydown(event, index) {
+        const cell = event.currentTarget;
+        switch (event.which) {
+            //arrows
+            case 38:
+            case 40: {
+                cell.tabIndex = '-1';
+                var cells = cell.parentElement.children;
+                var cellIndex = DomHandler.index(cell);
+                let nextCell = cells[event.which === 40 ? cellIndex + 3 : cellIndex -3];
+                if (nextCell) {
+                    nextCell.tabIndex = '0';
+                    nextCell.focus();
+                }
+                event.preventDefault();
+                break;
+            }
+
+            //left arrow
+            case 37: {
+                cell.tabIndex = '-1';
+                let prevCell = cell.previousElementSibling;
+                if (prevCell) {
+                    prevCell.tabIndex = '0';
+                    prevCell.focus();
+                }
+                event.preventDefault();
+                break;
+            }
+
+            //right arrow
+            case 39: {
+                cell.tabIndex = '-1';
+                let nextCell = cell.nextElementSibling;
+                if (nextCell) {
+                    nextCell.tabIndex = '0';
+                    nextCell.focus();
+                }
+                event.preventDefault();
+                break;
+            }
+
+            //enter
+            case 13: {
+                this.onMonthSelect(event, index);
+                event.preventDefault();
+                break;
+            }
+
+            //escape
+            case 27: {
+                this.overlayVisible = false;
+                event.preventDefault();
+                break;
+            }
+
+            //tab
+            case 9: {
+                if (!this.inline) {
+                    this.trapFocus(event);
+                }
+                break;
+            }
+
+            default:
+                //no op
+            break;
+        }
+    }
+
+    navigateToMonth(prev, groupIndex) {
+        if (prev) {
+            if (this.numberOfMonths === 1 || (groupIndex === 0)) {
+                this.navigationState = {backward: true};
+                this.navBackward(event);
+            }
+            else {
+                let prevMonthContainer = this.contentViewChild.nativeElement.children[groupIndex - 1];
+                let cells = DomHandler.find(prevMonthContainer, '.p-datepicker-calendar td span:not(.p-disabled):not(.p-ink)');
+                let focusCell = cells[cells.length - 1];
+                focusCell.tabIndex = '0';
+                focusCell.focus();
+            }
+        }
+        else {
+            if (this.numberOfMonths === 1 || (groupIndex === this.numberOfMonths - 1)) {
+                this.navigationState = {backward: false};
+                this.navForward(event);
+            }
+            else {
+                let nextMonthContainer = this.contentViewChild.nativeElement.children[groupIndex + 1];
+                let focusCell = DomHandler.findSingle(nextMonthContainer, '.p-datepicker-calendar td span:not(.p-disabled):not(.p-ink)');
+                focusCell.tabIndex = '0';
+                focusCell.focus();
+            }
+        }
+    }
+
+    updateFocus() {
+        let cell;
+        if (this.navigationState) {
+            if (this.navigationState.button) {
+                this.initFocusableCell();
+
+                if (this.navigationState.backward)
+                    DomHandler.findSingle(this.contentViewChild.nativeElement, '.p-datepicker-prev').focus();
+                else
+                    DomHandler.findSingle(this.contentViewChild.nativeElement, '.p-datepicker-next').focus();
+            }
+            else {
+                if (this.navigationState.backward) {
+                    let cells = DomHandler.find(this.contentViewChild.nativeElement, '.p-datepicker-calendar td span:not(.p-disabled):not(.p-ink)');
+                    cell = cells[cells.length - 1];
+                }
+                else {
+                    cell = DomHandler.findSingle(this.contentViewChild.nativeElement, '.p-datepicker-calendar td span:not(.p-disabled):not(.p-ink)');
+                }
+
+                if (cell) {
+                    cell.tabIndex = '0';
+                    cell.focus();
+                }
+            }
+
+            this.navigationState = null;
+        }
+        else {
+            this.initFocusableCell();
+        }
+    }
+
+    initFocusableCell() {
+        let cell;
+        if (this.view === 'month') {
+            let cells = DomHandler.find(this.contentViewChild.nativeElement, '.p-monthpicker .p-monthpicker-month:not(.p-disabled)');
+            let selectedCell= DomHandler.findSingle(this.contentViewChild.nativeElement, '.p-monthpicker .p-monthpicker-month.p-highlight');
+            cells.forEach(cell => cell.tabIndex = -1);
+            cell = selectedCell || cells[0];
+
+            if (cells.length === 0) {
+                let disabledCells = DomHandler.find(this.contentViewChild.nativeElement, '.p-monthpicker .p-monthpicker-month.p-disabled[tabindex = "0"]');
+                disabledCells.forEach(cell => cell.tabIndex = -1);
+            }
+        }
+        else {
+            cell = DomHandler.findSingle(this.contentViewChild.nativeElement, 'span.p-highlight');
+            if (!cell) {
+                let todayCell = DomHandler.findSingle(this.contentViewChild.nativeElement, 'td.p-datepicker-today span:not(.p-disabled):not(.p-ink)');
+                if (todayCell)
+                    cell = todayCell;
+                else
+                    cell = DomHandler.findSingle(this.contentViewChild.nativeElement, '.p-datepicker-calendar td span:not(.p-disabled):not(.p-ink)');
+            }
+        }
+
+        if (cell) {
+            cell.tabIndex = '0';
+        }
+    }
+
+    trapFocus(event) {
+        let focusableElements = DomHandler.getFocusableElements(this.contentViewChild.nativeElement);
+
+        if (focusableElements && focusableElements.length > 0) {
+            if (!focusableElements[0].ownerDocument.activeElement) {
+                focusableElements[0].focus();
+            }
+            else {
+                let focusedIndex = focusableElements.indexOf(focusableElements[0].ownerDocument.activeElement);
+
+                if (event.shiftKey) {
+                    if (focusedIndex == -1 || focusedIndex === 0) {
+                        if (this.focusTrap){
+                            focusableElements[focusableElements.length - 1].focus();
+                        }
+                        else {
+                            if (focusedIndex === -1)
+                                return this.hideOverlay();
+                            else if (focusedIndex === 0)
+                                return;
+                        }
+                    }
+                    else {
+                        focusableElements[focusedIndex - 1].focus();
+                    }
+                }
+                else {
+                    if (focusedIndex == -1 || focusedIndex === (focusableElements.length - 1)) {
+                        if (!this.focusTrap && focusedIndex != -1)
+                            return this.hideOverlay();
+                        else
+                            focusableElements[0].focus();
+                    }
+                    else {
+                        focusableElements[focusedIndex + 1].focus();
+                    }
+                }
+            }
+        }
+
+        event.preventDefault();
+    }
+
     onMonthDropdownChange(m: string) {
         this.currentMonth = parseInt(m);
         this.onMonthChange.emit({ month: this.currentMonth + 1, year: this.currentYear });
         this.createMonths(this.currentMonth, this.currentYear);
     }
-    
+
     onYearDropdownChange(y: string) {
         this.currentYear = parseInt(y);
         this.onYearChange.emit({ month: this.currentMonth + 1, year: this.currentYear });
         this.createMonths(this.currentMonth, this.currentYear);
     }
-    
+
+    convertTo24Hour = function (hours: number, pm: boolean) {
+        if (this.hourFormat == '12') {
+            if (hours === 12) {
+                return (pm ? 12 : 0);
+            } else {
+                return (pm ? hours + 12 : hours);
+            }
+        }
+        return hours;
+    }
+
+    validateTime(hour: number, minute: number, second: number, pm: boolean) {
+        let value = this.value;
+        const convertedHour = this.convertTo24Hour(hour, pm);
+        if (this.isRangeSelection()) {
+            value = this.value[1] || this.value[0];
+        }
+        if (this.isMultipleSelection()) {
+            value = this.value[this.value.length - 1];
+        }
+        const valueDateString = value ? value.toDateString() : null;
+        if (this.minDate && valueDateString && this.minDate.toDateString() === valueDateString) {
+            if (this.minDate.getHours() > convertedHour) {
+                return false;
+            }
+            if (this.minDate.getHours() === convertedHour) {
+                if (this.minDate.getMinutes() > minute) {
+                    return false;
+                }
+                if (this.minDate.getMinutes() === minute) {
+                    if (this.minDate.getSeconds() > second) {
+                        return false;
+                    }
+                }
+            }
+        }
+
+      if (this.maxDate && valueDateString && this.maxDate.toDateString() === valueDateString) {
+            if (this.maxDate.getHours() < convertedHour) {
+                return false;
+            }
+            if (this.maxDate.getHours() === convertedHour) {
+                if (this.maxDate.getMinutes() < minute) {
+                    return false;
+                }
+                if (this.maxDate.getMinutes() === minute) {
+                  if (this.maxDate.getSeconds() < second) {
+                      return false;
+                  }
+                }
+            }
+        }
+        return true;
+    }
+
+
     incrementHour(event) {
         const prevHour = this.currentHour;
-        const newHour = this.currentHour + this.stepHour;
+        let newHour = this.currentHour + this.stepHour;
+        let newPM = this.pm;
 
-        if (this.validateHour(newHour)) {
-            if (this.hourFormat == '24')
-                this.currentHour = (newHour >= 24) ? (newHour - 24) : newHour;
-            else if (this.hourFormat == '12') {
-                // Before the AM/PM break, now after
-                if (prevHour < 12 && newHour > 11) {
-                    this.pm = !this.pm;
-                }
-
-                this.currentHour = (newHour >= 13) ? (newHour - 12) : newHour;
+        if (this.hourFormat == '24')
+            newHour = (newHour >= 24) ? (newHour - 24) : newHour;
+        else if (this.hourFormat == '12') {
+            // Before the AM/PM break, now after
+            if (prevHour < 12 && newHour > 11) {
+                newPM= !this.pm;
             }
+            newHour = (newHour >= 13) ? (newHour - 12) : newHour;
+        }
+
+        if (this.validateTime(newHour, this.currentMinute, this.currentSecond, newPM)) {
+          this.currentHour = newHour;
+          this.pm = newPM;
         }
         event.preventDefault();
     }
@@ -1218,7 +1715,7 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
     }
 
     onTimePickerElementMouseOut(event: Event) {
-        if (!this.disabled) {
+        if (!this.disabled && this.timePickerTimer) {
             this.clearTimePickerTimer();
             this.updateTime();
         }
@@ -1230,6 +1727,7 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
         this.clearTimePickerTimer();
         this.timePickerTimer = setTimeout(() => {
             this.repeat(event, 100, type, direction);
+            this.cd.markForCheck();
         }, i);
 
         switch(type) {
@@ -1260,147 +1758,72 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
 
     clearTimePickerTimer() {
         if (this.timePickerTimer) {
-            clearInterval(this.timePickerTimer);
+            clearTimeout(this.timePickerTimer);
         }
     }
-    
+
     decrementHour(event) {
-        const newHour = this.currentHour - this.stepHour;
-        
-        if (this.validateHour(newHour)) {
-            if (this.hourFormat == '24')
-                this.currentHour = (newHour < 0) ? (24 + newHour) : newHour;
-            else if (this.hourFormat == '12') {
-                // If we were at noon/midnight, then switch
-                if (this.currentHour === 12) {
-                    this.pm = !this.pm;
-                }
-                this.currentHour = (newHour <= 0) ? (12 + newHour) : newHour;
+        let newHour = this.currentHour - this.stepHour;
+        let newPM = this.pm
+
+        if (this.hourFormat == '24')
+            newHour = (newHour < 0) ? (24 + newHour) : newHour;
+        else if (this.hourFormat == '12') {
+            // If we were at noon/midnight, then switch
+            if (this.currentHour === 12) {
+                newPM = !this.pm;
             }
+            newHour = (newHour <= 0) ? (12 + newHour) : newHour;
+        }
+
+        if (this.validateTime(newHour, this.currentMinute, this.currentSecond, newPM)) {
+          this.currentHour = newHour;
+          this.pm = newPM;
         }
 
         event.preventDefault();
     }
-    
-    validateHour(hour): boolean {
-        let valid: boolean = true;
-        let value = this.value;
-        if (this.isRangeSelection()) {
-            value = this.value[1] || this.value[0];
-        }
-        if (this.isMultipleSelection()) {
-            value = this.value[this.value.length - 1];
-        }
-        let valueDateString = value ? value.toDateString() : null;
-        
-        if (this.minDate && valueDateString && this.minDate.toDateString() === valueDateString) {
-            if (this.minDate.getHours() > hour) {
-                valid = false;
-            }
-        }
-        
-        if (this.maxDate && valueDateString && this.maxDate.toDateString() === valueDateString) {
-            if (this.maxDate.getHours() < hour) {
-                valid = false;
-            }
-        }
-        
-        return valid;
-    }
-    
+
     incrementMinute(event) {
         let newMinute = this.currentMinute + this.stepMinute;
-        if (this.validateMinute(newMinute)) {
-            this.currentMinute = (newMinute > 59) ? newMinute - 60 : newMinute;
+        newMinute = (newMinute > 59) ? newMinute - 60 : newMinute;
+        if (this.validateTime(this.currentHour, newMinute, this.currentSecond, this.pm)) {
+            this.currentMinute = newMinute;
         }
-        
+
         event.preventDefault();
     }
-    
+
     decrementMinute(event) {
         let newMinute = this.currentMinute - this.stepMinute;
         newMinute = (newMinute < 0) ? 60 + newMinute : newMinute;
-        if (this.validateMinute(newMinute)) {
+        if (this.validateTime(this.currentHour, newMinute, this.currentSecond, this.pm)) {
             this.currentMinute = newMinute;
         }
-        
+
         event.preventDefault();
     }
-    
-    validateMinute(minute): boolean {
-        let valid: boolean = true;
-        let value = this.value;
-        if (this.isRangeSelection()) {
-            value = this.value[1] || this.value[0];
-        }
-        if (this.isMultipleSelection()) {
-            value = this.value[this.value.length - 1];
-        }
-        let valueDateString = value ? value.toDateString() : null;
-        if (this.minDate && valueDateString && this.minDate.toDateString() === valueDateString) {
-            if (value.getHours() == this.minDate.getHours()){
-                if (this.minDate.getMinutes() > minute) {
-                    valid = false;
-                }
-            }
-        }
-        
-        if (this.maxDate && valueDateString && this.maxDate.toDateString() === valueDateString) {
-            if (value.getHours() == this.maxDate.getHours()){
-                if (this.maxDate.getMinutes() < minute) {
-                    valid = false;
-                }
-            }
-        }
-        
-        return valid;
-    }
-    
+
     incrementSecond(event) {
         let newSecond = this.currentSecond + this.stepSecond;
-        if (this.validateSecond(newSecond)) {
-            this.currentSecond = (newSecond > 59) ? newSecond - 60 : newSecond;
+        newSecond = (newSecond > 59) ? newSecond - 60 : newSecond;
+        if (this.validateTime(this.currentHour, this.currentMinute, newSecond, this.pm)) {
+            this.currentSecond = newSecond;
         }
-    
+
         event.preventDefault();
     }
-    
+
     decrementSecond(event) {
         let newSecond = this.currentSecond - this.stepSecond;
         newSecond = (newSecond < 0) ? 60 + newSecond : newSecond;
-        if (this.validateSecond(newSecond)) {
+        if (this.validateTime(this.currentHour, this.currentMinute, newSecond, this.pm)) {
             this.currentSecond = newSecond;
         }
-        
+
         event.preventDefault();
     }
-    
-    validateSecond(second): boolean {
-        let valid: boolean = true;
-        let value = this.value;
-        if (this.isRangeSelection()) {
-            value = this.value[1] || this.value[0];
-        }
-        if (this.isMultipleSelection()) {
-            value = this.value[this.value.length - 1];
-        }
-        let valueDateString = value ? value.toDateString() : null;
-        
-        if (this.minDate && valueDateString && this.minDate.toDateString() === valueDateString) {
-            if (this.minDate.getSeconds() > second) {
-                valid = false;
-            }
-        }
-        
-        if (this.maxDate && valueDateString && this.maxDate.toDateString() === valueDateString) {
-            if (this.maxDate.getSeconds() < second) {
-                valid = false;
-            }
-        }
-        
-        return valid;
-    }
-    
+
     updateTime() {
         let value = this.value;
         if (this.isRangeSelection()) {
@@ -1420,7 +1843,7 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
         else {
             value.setHours(this.currentHour);
         }
-        
+
         value.setMinutes(this.currentMinute);
         value.setSeconds(this.currentSecond);
         if (this.isRangeSelection()) {
@@ -1438,10 +1861,13 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
         this.onSelect.emit(value);
         this.updateInputfield();
     }
-    
+
     toggleAMPM(event) {
-        this.pm = !this.pm;
-        this.updateTime();
+        const newPM = !this.pm;
+        if (this.validateTime(this.currentHour, this.currentMinute, this.currentSecond, newPM)) {
+          this.pm = newPM;
+          this.updateTime();
+        }
         event.preventDefault();
     }
 
@@ -1451,7 +1877,7 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
             return;
         }
         this.isKeydown = false;
-        
+
         let val = event.target.value;
         try {
             let value = this.parseValueFromString(val);
@@ -1464,7 +1890,7 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
             //invalid date
             this.updateModel(null);
         }
-        
+
         this.filled = val != null && val.length;
         this.onInput.emit(event);
     }
@@ -1482,14 +1908,14 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
         }
         return isValid;
     }
-    
+
     parseValueFromString(text: string): Date | Date[]{
         if (!text || text.trim().length === 0) {
             return null;
         }
-        
+
         let value: any;
-        
+
         if (this.isSingleSelection()) {
             value = this.parseDateTime(text);
         }
@@ -1507,14 +1933,14 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
                 value[i] = this.parseDateTime(tokens[i].trim());
             }
         }
-        
+
         return value;
     }
-    
+
     parseDateTime(text): Date {
         let date: Date;
         let parts: string[] = text.split(' ');
-        
+
         if (this.timeOnly) {
             date = new Date();
             this.populateTime(date, parts[0], parts[1]);
@@ -1524,7 +1950,7 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
             if (this.showTime) {
                 let ampm = this.hourFormat == '12' ? parts.pop() : null;
                 let timeString = parts.pop();
-                
+
                 date = this.parseDate(parts.join(' '), dateFormat);
                 this.populateTime(date, timeString, ampm);
             }
@@ -1532,22 +1958,22 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
                  date = this.parseDate(text, dateFormat);
             }
         }
-        
+
         return date;
     }
-    
+
     populateTime(value, timeString, ampm) {
         if (this.hourFormat == '12' && !ampm) {
             throw 'Invalid Time';
         }
-        
+
         this.pm = (ampm === 'PM' || ampm === 'pm');
         let time = this.parseTime(timeString);
         value.setHours(time.hour);
         value.setMinutes(time.minute);
         value.setSeconds(time.second);
     }
-    
+
     updateUI() {
         let val = this.value||this.defaultDate||new Date();
         if (Array.isArray(val)){
@@ -1557,29 +1983,14 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
         this.currentMonth = val.getMonth();
         this.currentYear = val.getFullYear();
         this.createMonths(this.currentMonth, this.currentYear);
-        
+
         if (this.showTime||this.timeOnly) {
-            let hours = val.getHours();
-            
-            if (this.hourFormat == '12') {
-                this.pm = hours > 11;
-                
-                if (hours >= 12) {
-                    this.currentHour = (hours == 12) ? 12 : hours - 12;
-                }
-                else {
-                    this.currentHour = (hours == 0) ? 12 : hours;
-                }
-            }
-            else {
-                this.currentHour = val.getHours();
-            }
-            
+            this.setCurrentHourPM(val.getHours());
             this.currentMinute = val.getMinutes();
             this.currentSecond = val.getSeconds();
         }
     }
-        
+
     showOverlay() {
         if (!this.overlayVisible) {
             this.updateUI();
@@ -1594,6 +2005,8 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
         if (this.touchUI) {
             this.disableModality();
         }
+
+        this.cd.markForCheck();
     }
 
     toggle() {
@@ -1619,7 +2032,7 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
                         this.overlay.style.zIndex = String(this.baseZIndex + (++DomHandler.zindex));
                     }
                     this.alignOverlay();
-                    
+                    this.onShow.emit(event);
                 }
             break;
 
@@ -1637,6 +2050,7 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
                 if (!this.inline) {
                     this.bindDocumentClickListener();
                     this.bindDocumentResizeListener();
+                    this.bindScrollListener();
                 }
             break;
         }
@@ -1656,7 +2070,7 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
             this.el.nativeElement.appendChild(this.overlay);
         }
     }
-    
+
     alignOverlay() {
         if (this.touchUI) {
             this.enableModality(this.overlay);
@@ -1673,17 +2087,17 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
         if (!this.mask) {
             this.mask = document.createElement('div');
             this.mask.style.zIndex = String(parseInt(element.style.zIndex) - 1);
-            let maskStyleClass = 'ui-widget-overlay ui-datepicker-mask ui-datepicker-mask-scrollblocker';
+            let maskStyleClass = 'p-component-overlay p-datepicker-mask p-datepicker-mask-scrollblocker';
             DomHandler.addMultipleClasses(this.mask, maskStyleClass);
-            
+
 			this.maskClickListener = this.renderer.listen(this.mask, 'click', (event: any) => {
                 this.disableModality();
             });
             document.body.appendChild(this.mask);
-            DomHandler.addClass(document.body, 'ui-overflow-hidden');
+            DomHandler.addClass(document.body, 'p-overflow-hidden');
         }
     }
-    
+
     disableModality() {
         if (this.mask) {
             document.body.removeChild(this.mask);
@@ -1691,14 +2105,14 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
             let hasBlockerMasks: boolean;
             for (let i = 0; i < bodyChildren.length; i++) {
                 let bodyChild = bodyChildren[i];
-                if (DomHandler.hasClass(bodyChild, 'ui-datepicker-mask-scrollblocker')) {
+                if (DomHandler.hasClass(bodyChild, 'p-datepicker-mask-scrollblocker')) {
                     hasBlockerMasks = true;
                     break;
                 }
             }
-            
+
             if (!hasBlockerMasks) {
-                DomHandler.removeClass(document.body, 'ui-overflow-hidden');
+                DomHandler.removeClass(document.body, 'p-overflow-hidden');
             }
 
             this.unbindMaskClickListener();
@@ -1722,8 +2136,9 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
 
         this.updateInputfield();
         this.updateUI();
+        this.cd.markForCheck();
     }
-    
+
     registerOnChange(fn: Function): void {
         this.onModelChange = fn;
     }
@@ -1731,15 +2146,16 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
     registerOnTouched(fn: Function): void {
         this.onModelTouched = fn;
     }
-    
+
     setDisabledState(val: boolean): void {
         this.disabled = val;
+        this.cd.markForCheck();
     }
 
     getDateFormat() {
-        return this.dateFormat || this.locale.dateFormat;
+        return this.dateFormat;
     }
-    
+
     // Ported from jquery-ui datepicker formatDate
     formatDate(date, format) {
         if (!date) {
@@ -1783,7 +2199,7 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
                             output += formatNumber('d', date.getDate(), 2);
                             break;
                         case 'D':
-                            output += formatName('D', date.getDay(), this.locale.dayNamesShort, this.locale.dayNames);
+                            output += formatName('D', date.getDay(), this.getTranslation(TranslationKeys.DAY_NAMES_SHORT), this.getTranslation(TranslationKeys.DAY_NAMES));
                             break;
                         case 'o':
                             output += formatNumber('o',
@@ -1795,7 +2211,7 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
                             output += formatNumber('m', date.getMonth() + 1, 2);
                             break;
                         case 'M':
-                            output += formatName('M',date.getMonth(), this.locale.monthNamesShort, this.locale.monthNames);
+                            output += formatName('M',date.getMonth(), this.getTranslation(TranslationKeys.MONTH_NAMES_SHORT), this.getTranslation(TranslationKeys.MONTH_NAMES));
                             break;
                         case 'y':
                             output += lookAhead('y') ? date.getFullYear() : (date.getFullYear() % 100 < 10 ? '0' : '') + (date.getFullYear() % 100);
@@ -1821,21 +2237,21 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
         }
         return output;
     }
-    
+
     formatTime(date) {
         if (!date) {
             return '';
         }
-        
+
         let output = '';
         let hours = date.getHours();
         let minutes = date.getMinutes();
         let seconds = date.getSeconds();
-        
+
         if (this.hourFormat == '12' && hours > 11 && hours != 12) {
             hours-=12;
         }
-        
+
         if (this.hourFormat == '12') {
             output += hours === 0 ? 12 : (hours < 10) ? '0' + hours : hours;
         } else {
@@ -1843,31 +2259,31 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
         }
         output += ':';
         output += (minutes < 10) ? '0' + minutes : minutes;
-        
+
         if (this.showSeconds) {
             output += ':';
             output += (seconds < 10) ? '0' + seconds : seconds;
         }
-        
+
         if (this.hourFormat == '12') {
             output += date.getHours() > 11 ? ' PM' : ' AM';
         }
-        
+
         return output;
     }
-    
+
     parseTime(value) {
         let tokens: string[] = value.split(':');
         let validTokenLength = this.showSeconds ? 3 : 2;
-        
+
         if (tokens.length !== validTokenLength) {
             throw "Invalid time";
         }
-        
+
         let h = parseInt(tokens[0]);
         let m = parseInt(tokens[1]);
         let s = this.showSeconds ? parseInt(tokens[2]) : null;
-        
+
         if (isNaN(h) || isNaN(m) || h > 23 || m > 59 || (this.hourFormat == '12' && h > 12) || (this.showSeconds && (isNaN(s) || s > 59))) {
             throw "Invalid time";
         }
@@ -1880,11 +2296,11 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
                     h -= 12;
                 }
             }
-            
+
             return {hour: h, minute: m, second: s};
         }
     }
-    
+
     // Ported from jquery-ui datepicker parseDate
     parseDate(value, format) {
         if (format == null || value == null) {
@@ -1929,14 +2345,14 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
             let index = -1;
             let arr = lookAhead(match) ? longNames : shortNames;
             let names = [];
-            
+
             for (let i = 0; i < arr.length; i++) {
                 names.push([i,arr[i]]);
             }
             names.sort((a,b) => {
                 return -(a[ 1 ].length - b[ 1 ].length);
             });
-            
+
             for (let i = 0; i < names.length; i++) {
                 let name = names[i][1];
                 if (value.substr(iValue, name.length).toLowerCase() === name.toLowerCase()) {
@@ -1962,7 +2378,7 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
         if (this.view === 'month') {
             day = 1;
         }
-        
+
         for (iFormat = 0; iFormat < format.length; iFormat++) {
             if (literal) {
                 if (format.charAt(iFormat) === "'" && !lookAhead("'")) {
@@ -1976,7 +2392,7 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
                         day = getNumber("d");
                         break;
                     case "D":
-                        getName("D", this.locale.dayNamesShort, this.locale.dayNames);
+                        getName("D", this.getTranslation(TranslationKeys.DAY_NAMES_SHORT), this.getTranslation(TranslationKeys.DAY_NAMES));
                         break;
                     case "o":
                         doy = getNumber("o");
@@ -1985,7 +2401,7 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
                         month = getNumber("m");
                         break;
                     case "M":
-                        month = getName("M", this.locale.monthNamesShort, this.locale.monthNames);
+                        month = getName("M", this.getTranslation(TranslationKeys.MONTH_NAMES_SHORT), this.getTranslation(TranslationKeys.MONTH_NAMES));
                         break;
                     case "y":
                         year = getNumber("y");
@@ -2049,53 +2465,56 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
 
         return date;
     }
-    
+
     daylightSavingAdjust(date) {
         if (!date) {
             return null;
         }
 
         date.setHours(date.getHours() > 12 ? date.getHours() + 2 : 0);
-        
+
         return date;
     }
-    
+
     updateFilledState() {
         this.filled = this.inputFieldValue && this.inputFieldValue != '';
     }
-    
+
     onTodayButtonClick(event) {
         let date: Date = new Date();
         let dateMeta = {day: date.getDate(), month: date.getMonth(), year: date.getFullYear(), otherMonth: date.getMonth() !== this.currentMonth || date.getFullYear() !== this.currentYear, today: true, selectable: true};
-        
+
         this.onDateSelect(event, dateMeta);
         this.onTodayClick.emit(event);
     }
-    
+
     onClearButtonClick(event) {
         this.updateModel(null);
         this.updateInputfield();
         this.hideOverlay();
         this.onClearClick.emit(event);
     }
-    
+
     bindDocumentClickListener() {
         if (!this.documentClickListener) {
             this.zone.runOutsideAngular(() => {
-                this.documentClickListener = this.renderer.listen('document', 'click', (event) => {
+                const documentTarget: any = this.el ? this.el.nativeElement.ownerDocument : 'document';
+
+                this.documentClickListener = this.renderer.listen(documentTarget, 'click', (event) => {
                     if (this.isOutsideClicked(event) && this.overlayVisible) {
                         this.zone.run(() => {
                             this.hideOverlay();
-                            
+                            this.onClickOutside.emit(event);
+
                             this.cd.markForCheck();
                         });
                     }
-                    
+
                 });
             });
         }
     }
-    
+
     unbindDocumentClickListener() {
         if (this.documentClickListener) {
             this.documentClickListener();
@@ -2109,7 +2528,7 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
             window.addEventListener('resize', this.documentResizeListener);
         }
     }
-    
+
     unbindDocumentResizeListener() {
         if (this.documentResizeListener) {
             window.removeEventListener('resize', this.documentResizeListener);
@@ -2117,14 +2536,32 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
         }
     }
 
+    bindScrollListener() {
+        if (!this.scrollHandler) {
+            this.scrollHandler = new ConnectedOverlayScrollHandler(this.containerViewChild.nativeElement, () => {
+                if (this.overlayVisible) {
+                    this.hideOverlay();
+                }
+            });
+        }
+
+        this.scrollHandler.bindScrollListener();
+    }
+
+    unbindScrollListener() {
+        if (this.scrollHandler) {
+            this.scrollHandler.unbindScrollListener();
+        }
+    }
+
     isOutsideClicked(event: Event) {
         return !(this.el.nativeElement.isSameNode(event.target) || this.isNavIconClicked(event) || 
                 this.el.nativeElement.contains(event.target) || (this.overlay && this.overlay.contains(<Node> event.target)));
     }
-    
+
     isNavIconClicked(event: Event) {
-        return (DomHandler.hasClass(event.target, 'ui-datepicker-prev') || DomHandler.hasClass(event.target, 'ui-datepicker-prev-icon')
-                || DomHandler.hasClass(event.target, 'ui-datepicker-next') || DomHandler.hasClass(event.target, 'ui-datepicker-next-icon'));
+        return (DomHandler.hasClass(event.target, 'p-datepicker-prev') || DomHandler.hasClass(event.target, 'p-datepicker-prev-icon')
+                || DomHandler.hasClass(event.target, 'p-datepicker-next') || DomHandler.hasClass(event.target, 'p-datepicker-next-icon'));
     }
 
     onWindowResize() {
@@ -2137,11 +2574,21 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
         this.unbindDocumentClickListener();
         this.unbindMaskClickListener();
         this.unbindDocumentResizeListener();
+        this.unbindScrollListener();
         this.overlay = null;
         this.disableModality();
     }
-    
+
     ngOnDestroy() {
+        if (this.scrollHandler) {
+            this.scrollHandler.destroy();
+            this.scrollHandler = null;
+        }
+
+        if (this.translationSubscription) {
+            this.translationSubscription.unsubscribe();
+        }
+
         this.clearTimePickerTimer();
         this.restoreOverlayAppend();
         this.onOverlayHide();
@@ -2149,7 +2596,7 @@ export class Calendar implements OnInit,OnDestroy,ControlValueAccessor {
 }
 
 @NgModule({
-    imports: [CommonModule,ButtonModule,SharedModule],
+    imports: [CommonModule,ButtonModule,SharedModule,RippleModule],
     exports: [Calendar,ButtonModule,SharedModule],
     declarations: [Calendar]
 })

@@ -10,7 +10,8 @@ import {DialogModule} from 'primeng/dialog';
 import {InputTextModule} from 'primeng/inputtext';
 import {ButtonModule} from 'primeng/button';
 import {TabViewModule} from 'primeng/tabview';
-import {CodeHighlighterModule} from 'primeng/codehighlighter';
+import {AppCodeModule} from '../../app.code.component';
+import {AppDemoActionsModule} from '../../app.demoactions.component';
 
 @NgModule({
 	imports: [
@@ -24,7 +25,8 @@ import {CodeHighlighterModule} from 'primeng/codehighlighter';
         DialogModule,
         ButtonModule,
         TabViewModule,
-        CodeHighlighterModule
+        AppCodeModule,
+        AppDemoActionsModule
 	],
 	declarations: [
 		GMapDemo

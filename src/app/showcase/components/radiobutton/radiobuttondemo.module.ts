@@ -5,7 +5,8 @@ import {RadioButtonDemo} from './radiobuttondemo';
 import {RadioButtonDemoRoutingModule} from './radiobuttondemo-routing.module';
 import {RadioButtonModule} from 'primeng/radiobutton';
 import {TabViewModule} from 'primeng/tabview';
-import {CodeHighlighterModule} from 'primeng/codehighlighter';
+import {AppCodeModule} from '../../app.code.component';
+import {AppDemoActionsModule} from '../../app.demoactions.component';
 
 @NgModule({
 	imports: [
@@ -13,8 +14,9 @@ import {CodeHighlighterModule} from 'primeng/codehighlighter';
         FormsModule,
 		RadioButtonDemoRoutingModule,
         RadioButtonModule,
-        TabViewModule,
-        CodeHighlighterModule
+		TabViewModule,
+		AppCodeModule,
+		AppDemoActionsModule
 	],
 	declarations: [
 		RadioButtonDemo

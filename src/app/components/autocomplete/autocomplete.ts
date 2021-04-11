@@ -1,12 +1,14 @@
-import {NgModule,Component,ViewChild,ElementRef,AfterViewChecked,AfterContentInit,OnDestroy,Input,Output,EventEmitter,ContentChildren,QueryList,TemplateRef,Renderer2,forwardRef,ChangeDetectorRef,IterableDiffers} from '@angular/core';
+import {NgModule,Component,ViewChild,ElementRef,AfterViewChecked,AfterContentInit,OnDestroy,Input,Output,EventEmitter,ContentChildren,QueryList,TemplateRef,Renderer2,forwardRef,ChangeDetectorRef,IterableDiffers,ChangeDetectionStrategy, ViewEncapsulation} from '@angular/core';
 import {CommonModule} from '@angular/common';
-import {trigger,state,style,transition,animate,AnimationEvent} from '@angular/animations';
+import {trigger,style,transition,animate,AnimationEvent} from '@angular/animations';
 import {InputTextModule} from 'primeng/inputtext';
 import {ButtonModule} from 'primeng/button';
+import {RippleModule} from 'primeng/ripple';
 import {SharedModule,PrimeTemplate} from 'primeng/api';
-import {DomHandler} from 'primeng/dom';
-import {ObjectUtils} from 'primeng/utils';
+import {DomHandler, ConnectedOverlayScrollHandler} from 'primeng/dom';
+import {ObjectUtils, UniqueComponentId} from 'primeng/utils';
 import {NG_VALUE_ACCESSOR, ControlValueAccessor} from '@angular/forms';
+import {CdkVirtualScrollViewport, ScrollingModule} from '@angular/cdk/scrolling';
 
 export const AUTOCOMPLETE_VALUE_ACCESSOR: any = {
   provide: NG_VALUE_ACCESSOR,
@@ -17,58 +19,83 @@ export const AUTOCOMPLETE_VALUE_ACCESSOR: any = {
 @Component({
     selector: 'p-autoComplete',
     template: `
-        <span [ngClass]="{'ui-autocomplete ui-widget':true,'ui-autocomplete-dd':dropdown,'ui-autocomplete-multiple':multiple}" [ngStyle]="style" [class]="styleClass">
+        <span #container [ngClass]="{'p-autocomplete p-component':true,'p-autocomplete-dd':dropdown,'p-autocomplete-multiple':multiple}" [ngStyle]="style" [class]="styleClass">
             <input *ngIf="!multiple" #in [attr.type]="type" [attr.id]="inputId" [ngStyle]="inputStyle" [class]="inputStyleClass" [autocomplete]="autocomplete" [attr.required]="required" [attr.name]="name"
-            [ngClass]="'ui-inputtext ui-widget ui-state-default ui-corner-all ui-autocomplete-input'" [value]="inputFieldValue" aria-autocomplete="list" role="combobox" [attr.aria-expanded]="overlayVisible" aria-haspopup="true" [attr.aria-activedescendant]="'p-highlighted-option'"
+            class="p-autocomplete-input p-inputtext p-component" [ngClass]="{'p-autocomplete-dd-input':dropdown,'p-disabled': disabled}" [value]="inputFieldValue" aria-autocomplete="list" [attr.aria-controls]="listId" role="searchbox" [attr.aria-expanded]="overlayVisible" aria-haspopup="true" [attr.aria-activedescendant]="'p-highlighted-option'"
             (click)="onInputClick($event)" (input)="onInput($event)" (keydown)="onKeydown($event)" (keyup)="onKeyup($event)" [attr.autofocus]="autofocus" (focus)="onInputFocus($event)" (blur)="onInputBlur($event)" (change)="onInputChange($event)" (paste)="onInputPaste($event)"
             [attr.placeholder]="placeholder" [attr.size]="size" [attr.maxlength]="maxlength" [attr.tabindex]="tabindex" [readonly]="readonly" [disabled]="disabled" [attr.aria-label]="ariaLabel" [attr.aria-labelledby]="ariaLabelledBy" [attr.aria-required]="required"
-            ><ul *ngIf="multiple" #multiContainer class="ui-autocomplete-multiple-container ui-widget ui-inputtext ui-state-default ui-corner-all" [ngClass]="{'ui-state-disabled':disabled,'ui-state-focus':focus}" (click)="multiIn.focus()">
-                <li #token *ngFor="let val of value" class="ui-autocomplete-token ui-state-highlight ui-corner-all">
-                    <span class="ui-autocomplete-token-icon pi pi-fw pi-times" (click)="removeItem(token)" *ngIf="!disabled"></span>
-                    <span *ngIf="!selectedItemTemplate" class="ui-autocomplete-token-label">{{resolveFieldData(val)}}</span>
+            ><ul *ngIf="multiple" #multiContainer class="p-autocomplete-multiple-container p-component p-inputtext" [ngClass]="{'p-disabled':disabled,'p-focus':focus}" (click)="multiIn.focus()">
+                <li #token *ngFor="let val of value" class="p-autocomplete-token">
                     <ng-container *ngTemplateOutlet="selectedItemTemplate; context: {$implicit: val}"></ng-container>
+                    <span *ngIf="!selectedItemTemplate" class="p-autocomplete-token-label">{{resolveFieldData(val)}}</span>
+                    <span  class="p-autocomplete-token-icon pi pi-times-circle" (click)="removeItem(token)" *ngIf="!disabled && !readonly"></span>
                 </li>
-                <li class="ui-autocomplete-input-token">
+                <li class="p-autocomplete-input-token">
                     <input #multiIn [attr.type]="type" [attr.id]="inputId" [disabled]="disabled" [attr.placeholder]="(value&&value.length ? null : placeholder)" [attr.tabindex]="tabindex" [attr.maxlength]="maxlength" (input)="onInput($event)"  (click)="onInputClick($event)"
                             (keydown)="onKeydown($event)" [readonly]="readonly" (keyup)="onKeyup($event)" [attr.autofocus]="autofocus" (focus)="onInputFocus($event)" (blur)="onInputBlur($event)" (change)="onInputChange($event)" (paste)="onInputPaste($event)" [autocomplete]="autocomplete"
                             [ngStyle]="inputStyle" [class]="inputStyleClass" [attr.aria-label]="ariaLabel" [attr.aria-labelledby]="ariaLabelledBy" [attr.aria-required]="required"
-                            aria-autocomplete="list" role="combobox" [attr.aria-expanded]="overlayVisible" aria-haspopup="true" [attr.aria-activedescendant]="'p-highlighted-option'">
+                            aria-autocomplete="list" [attr.aria-controls]="listId" role="searchbox" [attr.aria-expanded]="overlayVisible" aria-haspopup="true" [attr.aria-activedescendant]="'p-highlighted-option'">
                 </li>
-            </ul
-            ><i *ngIf="loading" class="ui-autocomplete-loader pi pi-spinner pi-spin"></i><button #ddBtn type="button" pButton [icon]="dropdownIcon" class="ui-autocomplete-dropdown" [disabled]="disabled"
+            </ul>
+            <i *ngIf="loading" class="p-autocomplete-loader pi pi-spinner pi-spin"></i><button #ddBtn type="button" pButton [icon]="dropdownIcon" class="p-autocomplete-dropdown" [disabled]="disabled" pRipple
                 (click)="handleDropdownClick($event)" *ngIf="dropdown" [attr.tabindex]="tabindex"></button>
-            <div #panel *ngIf="overlayVisible" [ngClass]="['ui-autocomplete-panel ui-widget ui-widget-content ui-corner-all ui-shadow']" [style.max-height]="scrollHeight" [ngStyle]="panelStyle" [class]="panelStyleClass"
-                [@overlayAnimation]="{value: 'visible', params: {showTransitionParams: showTransitionOptions, hideTransitionParams: hideTransitionOptions}}" (@overlayAnimation.start)="onOverlayAnimationStart($event)" (@overlayAnimation.done)="onOverlayAnimationDone($event)" >
-                <ul role="listbox" class="ui-autocomplete-items ui-autocomplete-list ui-widget-content ui-widget ui-corner-all ui-helper-reset">
-                    <li role="option"  *ngFor="let option of suggestions; let idx = index" [ngClass]="{'ui-autocomplete-list-item ui-corner-all':true,'ui-state-highlight':(highlightOption==option)}"
-                        (mouseenter)="highlightOption=option" (mouseleave)="highlightOption=null" [id]="highlightOption == option ? 'p-highlighted-option':''" (click)="selectItem(option)">
-                        <span *ngIf="!itemTemplate">{{resolveFieldData(option)}}</span>
-                        <ng-container *ngTemplateOutlet="itemTemplate; context: {$implicit: option, index: idx}"></ng-container>
-                    </li>
-                    <li *ngIf="noResults && emptyMessage" class="ui-autocomplete-emptymessage ui-autocomplete-list-item ui-corner-all">{{emptyMessage}}</li>
+            <div #panel *ngIf="overlayVisible" [ngClass]="['p-autocomplete-panel p-component']" [style.max-height]="virtualScroll ? 'auto' : scrollHeight" [ngStyle]="panelStyle" [class]="panelStyleClass"
+                [@overlayAnimation]="{value: 'visible', params: {showTransitionParams: showTransitionOptions, hideTransitionParams: hideTransitionOptions}}" (@overlayAnimation.start)="onOverlayAnimationStart($event)">
+                <ul role="listbox" [attr.id]="listId" class="p-autocomplete-items">
+                    <ng-container *ngIf="group">
+                        <ng-template ngFor let-optgroup [ngForOf]="suggestions">
+                            <li class="p-autocomplete-item-group">
+                                <span *ngIf="!groupTemplate">{{getOptionGroupLabel(optgroup)||'empty'}}</span>
+                                <ng-container *ngTemplateOutlet="groupTemplate; context: {$implicit: optgroup}"></ng-container>
+                            </li>
+                            <ng-container *ngTemplateOutlet="itemslist; context: {$implicit: getOptionGroupChildren(optgroup)}"></ng-container>
+                        </ng-template>
+                    </ng-container>
+                    <ng-container *ngIf="!group">
+                            <ng-container *ngTemplateOutlet="itemslist; context: {$implicit: suggestions}"></ng-container>
+                    </ng-container>
+                    <ng-template #itemslist let-suggestionsToDisplay>
+                        <ng-container *ngIf="!virtualScroll; else virtualScrollList">
+                            <li role="option" *ngFor="let option of suggestionsToDisplay; let idx = index" class="p-autocomplete-item" pRipple [ngClass]="{'p-highlight': (option === highlightOption)}" [id]="highlightOption == option ? 'p-highlighted-option':''" (click)="selectItem(option)">
+                                <span *ngIf="!itemTemplate">{{resolveFieldData(option)}}</span>
+                                <ng-container *ngTemplateOutlet="itemTemplate; context: {$implicit: option, index: idx}"></ng-container>
+                            </li>
+                        </ng-container>
+                        <ng-template #virtualScrollList>
+                            <cdk-virtual-scroll-viewport [ngStyle]="{'height': scrollHeight}" [itemSize]="itemSize" *ngIf="virtualScroll && !noResults">
+                                <ng-container *cdkVirtualFor="let option of suggestionsToDisplay; let i = index; let c = count; let f = first; let l = last; let e = even; let o = odd">
+                                    <li role="option" class="p-autocomplete-item" pRipple [ngClass]="{'p-highlight': (option === highlightOption)}" [ngStyle]="{'height': itemSize + 'px'}" [id]="highlightOption == option ? 'p-highlighted-option':''" (click)="selectItem(option)">
+                                        <span *ngIf="!itemTemplate">{{resolveFieldData(option)}}</span>
+                                        <ng-container *ngTemplateOutlet="itemTemplate; context: {$implicit: option, index: i}"></ng-container>
+                                    </li>
+                                </ng-container>
+                            </cdk-virtual-scroll-viewport>
+                        </ng-template>
+                        <li *ngIf="noResults && emptyMessage" class="p-autocomplete-emptymessage p-autocomplete-item">{{emptyMessage}}</li>
+                    </ng-template>
                 </ul>
             </div>
         </span>
     `,
     animations: [
         trigger('overlayAnimation', [
-            state('void', style({
-                transform: 'translateY(5%)',
-                opacity: 0
-            })),
-            state('visible', style({
-                transform: 'translateY(0)',
-                opacity: 1
-            })),
-            transition('void => visible', animate('{{showTransitionParams}}')),
-            transition('visible => void', animate('{{hideTransitionParams}}'))
+            transition(':enter', [
+                style({opacity: 0, transform: 'scaleY(0.8)'}),
+                animate('{{showTransitionParams}}')
+              ]),
+              transition(':leave', [
+                animate('{{hideTransitionParams}}', style({ opacity: 0 }))
+              ])
         ])
     ],
     host: {
-        '[class.ui-inputwrapper-filled]': 'filled',
-        '[class.ui-inputwrapper-focus]': 'focus && !disabled'
+        '[class.p-inputwrapper-filled]': 'filled',
+        '[class.p-inputwrapper-focus]': '(focus && !disabled) || overlayVisible'
     },
-    providers: [AUTOCOMPLETE_VALUE_ACCESSOR]
+    providers: [AUTOCOMPLETE_VALUE_ACCESSOR],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    encapsulation: ViewEncapsulation.None,
+    styleUrls: ['./autocomplete.css']
 })
 export class AutoComplete implements AfterViewChecked,AfterContentInit,OnDestroy,ControlValueAccessor {
 
@@ -81,7 +108,7 @@ export class AutoComplete implements AfterViewChecked,AfterContentInit,OnDestroy
     @Input() panelStyle: any;
 
     @Input() styleClass: string;
-    
+
     @Input() panelStyleClass: string;
 
     @Input() inputStyle: any;
@@ -95,6 +122,10 @@ export class AutoComplete implements AfterViewChecked,AfterContentInit,OnDestroy
     @Input() readonly: boolean;
 
     @Input() disabled: boolean;
+
+    @Input() virtualScroll: boolean;
+
+    @Input() itemSize: number;
 
     @Input() maxlength: number;
 
@@ -113,16 +144,20 @@ export class AutoComplete implements AfterViewChecked,AfterContentInit,OnDestroy
     @Input() type: string = 'text';
 
     @Input() autoZIndex: boolean = true;
-    
+
     @Input() baseZIndex: number = 0;
 
     @Input() ariaLabel: string;
 
     @Input() ariaLabelledBy: string;
 
-    @Input() dropdownIcon: string = "pi pi-caret-down";
+    @Input() dropdownIcon: string = "pi pi-chevron-down";
 
     @Input() unique: boolean = true;
+
+    @Input() group: boolean;
+
+    @Input() completeOnFocus: boolean = false;
 
     @Output() completeMethod: EventEmitter<any> = new EventEmitter();
 
@@ -140,6 +175,10 @@ export class AutoComplete implements AfterViewChecked,AfterContentInit,OnDestroy
 
     @Output() onKeyUp: EventEmitter<any> = new EventEmitter();
 
+    @Output() onShow: EventEmitter<any> = new EventEmitter();
+
+    @Output() onHide: EventEmitter<any> = new EventEmitter();
+
     @Input() field: string;
 
     @Input() scrollHeight: string = '200px';
@@ -156,29 +195,41 @@ export class AutoComplete implements AfterViewChecked,AfterContentInit,OnDestroy
 
     @Input() emptyMessage: string;
 
-    @Input() showTransitionOptions: string = '225ms ease-out';
+    @Input() showTransitionOptions: string = '.12s cubic-bezier(0, 0, 0.2, 1)';
 
-    @Input() hideTransitionOptions: string = '195ms ease-in';
+    @Input() hideTransitionOptions: string = '.1s linear';
 
     @Input() autofocus: boolean;
 
     @Input() autocomplete: string = 'off';
 
-    @ViewChild('in', { static: false }) inputEL: ElementRef;
+    @Input() optionGroupChildren: string;
 
-    @ViewChild('multiIn', { static: false }) multiInputEL: ElementRef;
+    @Input() optionGroupLabel: string;
 
-    @ViewChild('multiContainer', { static: false }) multiContainerEL: ElementRef;
+    @ViewChild('container') containerEL: ElementRef;
 
-    @ViewChild('ddBtn', { static: false }) dropdownButton: ElementRef;
+    @ViewChild('in') inputEL: ElementRef;
+
+    @ViewChild('multiIn') multiInputEL: ElementRef;
+
+    @ViewChild('multiContainer') multiContainerEL: ElementRef;
+
+    @ViewChild('ddBtn') dropdownButton: ElementRef;
+
+    @ViewChild(CdkVirtualScrollViewport) viewPort: CdkVirtualScrollViewport;
 
     @ContentChildren(PrimeTemplate) templates: QueryList<any>;
 
     overlay: HTMLDivElement;
 
+    itemsWrapper: HTMLDivElement;
+
     itemTemplate: TemplateRef<any>;
 
     selectedItemTemplate: TemplateRef<any>;
+    
+    groupTemplate: TemplateRef<any>;
 
     value: any;
 
@@ -216,12 +267,21 @@ export class AutoComplete implements AfterViewChecked,AfterContentInit,OnDestroy
 
     loading: boolean;
 
+    scrollHandler: any;
+
     documentResizeListener: any;
 
     forceSelectionUpdateModelTimeout: any;
 
+    listId: string;
+
+    itemClicked: boolean;
+
+    virtualScrollSelectedIndex: number;
+
     constructor(public el: ElementRef, public renderer: Renderer2, public cd: ChangeDetectorRef, public differs: IterableDiffers) {
         this.differ = differs.find([]).create(null);
+        this.listId = UniqueComponentId() + '_list';
     }
 
     @Input() get suggestions(): any[] {
@@ -246,10 +306,20 @@ export class AutoComplete implements AfterViewChecked,AfterContentInit,OnDestroy
 
         if (this.highlightOptionChanged) {
             setTimeout(() => {
-                if (this.overlay) {
-                    let listItem = DomHandler.findSingle(this.overlay, 'li.ui-state-highlight');
+                if (this.overlay && this.itemsWrapper) {
+                    let listItem = DomHandler.findSingle(this.overlay, 'li.p-highlight');
+
                     if (listItem) {
-                        DomHandler.scrollInView(this.overlay, listItem);
+                        DomHandler.scrollInView(this.itemsWrapper, listItem);
+                    }
+
+                    if (this.virtualScroll && this.viewPort) {
+                        let range = this.viewPort.getRenderedRange();
+                        this.updateVirtualScrollSelectedIndex();
+                        
+                        if (range.start > this.virtualScrollSelectedIndex || range.end < this.virtualScrollSelectedIndex) {
+                            this.viewPort.scrollToIndex(this.virtualScrollSelectedIndex);
+                        }
                     }
                 }
             }, 1);
@@ -280,7 +350,7 @@ export class AutoComplete implements AfterViewChecked,AfterContentInit,OnDestroy
                     this.hide();
                 }
             }
-    
+
             this.loading = false;
         }
     }
@@ -290,6 +360,10 @@ export class AutoComplete implements AfterViewChecked,AfterContentInit,OnDestroy
             switch(item.getType()) {
                 case 'item':
                     this.itemTemplate = item.template;
+                break;
+
+                case 'group':
+                    this.groupTemplate = item.template;
                 break;
 
                 case 'selectedItem':
@@ -303,10 +377,25 @@ export class AutoComplete implements AfterViewChecked,AfterContentInit,OnDestroy
         });
     }
 
+    updateVirtualScrollSelectedIndex() {
+        if (this.highlightOption && this.suggestions && this.suggestions.length) {
+            this.virtualScrollSelectedIndex = this.findOptionIndex(this.highlightOption, this.suggestions);
+        }
+    }
+
     writeValue(value: any) : void {
         this.value = value;
         this.filled = this.value && this.value != '';
         this.updateInputField();
+        this.cd.markForCheck();
+    }
+
+    getOptionGroupChildren(optionGroup: any) {
+        return this.optionGroupChildren ? ObjectUtils.resolveFieldData(optionGroup, this.optionGroupChildren) : optionGroup.items;
+    }
+
+    getOptionGroupLabel(optionGroup: any) {
+        return this.optionGroupLabel ? ObjectUtils.resolveFieldData(optionGroup, this.optionGroupLabel) : (optionGroup.label != undefined ? optionGroup.label : optionGroup);
     }
 
     registerOnChange(fn: Function): void {
@@ -319,6 +408,7 @@ export class AutoComplete implements AfterViewChecked,AfterContentInit,OnDestroy
 
     setDisabledState(val: boolean): void {
         this.disabled = val;
+        this.cd.markForCheck();
     }
 
     onInput(event: Event) {
@@ -337,9 +427,9 @@ export class AutoComplete implements AfterViewChecked,AfterContentInit,OnDestroy
         }
 
         if (value.length === 0 && !this.multiple) {
-           this.hide();
-           this.onClear.emit(event);
-	   this.onModelChange(value);
+            this.hide();
+            this.onClear.emit(event);
+	        this.onModelChange(value);
         }
 
         if (value.length >= this.minLength) {
@@ -348,7 +438,6 @@ export class AutoComplete implements AfterViewChecked,AfterContentInit,OnDestroy
             }, this.delay);
         }
         else {
-            this.suggestions = null;
             this.hide();
         }
         this.updateFilledState();
@@ -390,7 +479,7 @@ export class AutoComplete implements AfterViewChecked,AfterContentInit,OnDestroy
             }
         }
         else {
-            this.inputEL.nativeElement.value = this.field ? ObjectUtils.resolveFieldData(option, this.field)||'': option;
+            this.inputEL.nativeElement.value =  this.resolveFieldData(option);
             this.value = option;
             this.onModelChange(this.value);
         }
@@ -399,14 +488,17 @@ export class AutoComplete implements AfterViewChecked,AfterContentInit,OnDestroy
         this.updateFilledState();
 
         if (focus) {
+            this.itemClicked = true;
             this.focusInput();
         }
     }
 
     show() {
         if (this.multiInputEL || this.inputEL) {
-            let hasFocus = this.multiple ? document.activeElement == this.multiInputEL.nativeElement : document.activeElement == this.inputEL.nativeElement ;
-            
+            let hasFocus = this.multiple ?
+                this.multiInputEL.nativeElement.ownerDocument.activeElement == this.multiInputEL.nativeElement :
+                this.inputEL.nativeElement.ownerDocument.activeElement == this.inputEL.nativeElement;
+
             if (!this.overlayVisible && hasFocus) {
                 this.overlayVisible = true;
             }
@@ -417,6 +509,7 @@ export class AutoComplete implements AfterViewChecked,AfterContentInit,OnDestroy
         switch (event.toState) {
             case 'visible':
                 this.overlay = event.element;
+                this.itemsWrapper = this.virtualScroll ? DomHandler.findSingle(this.overlay, '.cdk-virtual-scroll-viewport') : this.overlay;
                 this.appendOverlay();
                 if (this.autoZIndex) {
                     this.overlay.style.zIndex = String(this.baseZIndex + (++DomHandler.zindex));
@@ -424,17 +517,13 @@ export class AutoComplete implements AfterViewChecked,AfterContentInit,OnDestroy
                 this.alignOverlay();
                 this.bindDocumentClickListener();
                 this.bindDocumentResizeListener();
+                this.bindScrollListener();
+                this.onShow.emit(event);
             break;
 
             case 'void':
                 this.onOverlayHide();
             break;
-        }
-    }
-
-    onOverlayAnimationDone(event: AnimationEvent) {
-        if (event.toState === 'void') {
-            this._suggestions = null;
         }
     }
 
@@ -445,12 +534,15 @@ export class AutoComplete implements AfterViewChecked,AfterContentInit,OnDestroy
             else
                 DomHandler.appendChild(this.overlay, this.appendTo);
 
-            this.overlay.style.minWidth = DomHandler.getWidth(this.el.nativeElement.children[0]) + 'px';
+            if (!this.overlay.style.minWidth) {
+                this.overlay.style.minWidth = DomHandler.getWidth(this.el.nativeElement.children[0]) + 'px';
+            }
         }
     }
 
     resolveFieldData(value) {
-        return this.field ? ObjectUtils.resolveFieldData(value, this.field): value;
+        let data = this.field ? ObjectUtils.resolveFieldData(value, this.field) : value;
+        return data !== (null || undefined) ? data : '';
     }
 
     restoreOverlayAppend() {
@@ -468,21 +560,27 @@ export class AutoComplete implements AfterViewChecked,AfterContentInit,OnDestroy
 
     hide() {
         this.overlayVisible = false;
+        this.cd.markForCheck();
     }
 
     handleDropdownClick(event) {
-        this.focusInput();
-        let queryValue = this.multiple ? this.multiInputEL.nativeElement.value : this.inputEL.nativeElement.value;
+        if (!this.overlayVisible) {
+            this.focusInput();
+            let queryValue = this.multiple ? this.multiInputEL.nativeElement.value : this.inputEL.nativeElement.value;
 
-        if (this.dropdownMode === 'blank')
-            this.search(event, '');
-        else if (this.dropdownMode === 'current')
-            this.search(event, queryValue);
+            if (this.dropdownMode === 'blank')
+                this.search(event, '');
+            else if (this.dropdownMode === 'current')
+                this.search(event, queryValue);
 
-        this.onDropdownClick.emit({
-            originalEvent: event,
-            query: queryValue
-        });
+            this.onDropdownClick.emit({
+                originalEvent: event,
+                query: queryValue
+            });
+        }
+        else {
+            this.hide();
+        }
     }
 
     focusInput() {
@@ -503,20 +601,40 @@ export class AutoComplete implements AfterViewChecked,AfterContentInit,OnDestroy
 
     onKeydown(event) {
         if (this.overlayVisible) {
-            let highlightItemIndex = this.findOptionIndex(this.highlightOption);
-
             switch(event.which) {
                 //down
                 case 40:
-                    if (highlightItemIndex != -1) {
-                        var nextItemIndex = highlightItemIndex + 1;
-                        if (nextItemIndex != (this.suggestions.length)) {
-                            this.highlightOption = this.suggestions[nextItemIndex];
-                            this.highlightOptionChanged = true;
+                    if (this.group) {
+                        let highlightItemIndex = this.findOptionGroupIndex(this.highlightOption, this.suggestions);
+
+                        if (highlightItemIndex !== -1) {
+                            let nextItemIndex = highlightItemIndex.itemIndex + 1;
+                            if (nextItemIndex < (this.getOptionGroupChildren(this.suggestions[highlightItemIndex.groupIndex]).length)) {
+                                this.highlightOption = this.getOptionGroupChildren(this.suggestions[highlightItemIndex.groupIndex])[nextItemIndex];
+                                this.highlightOptionChanged = true;
+                            }
+                            else if (this.suggestions[highlightItemIndex.groupIndex + 1]) {
+                                this.highlightOption = this.getOptionGroupChildren(this.suggestions[highlightItemIndex.groupIndex + 1])[0];
+                                this.highlightOptionChanged = true;
+                            }
+                        }
+                        else {
+                            this.highlightOption = this.getOptionGroupChildren(this.suggestions[0])[0];
                         }
                     }
                     else {
-                        this.highlightOption = this.suggestions[0];
+                        let highlightItemIndex = this.findOptionIndex(this.highlightOption, this.suggestions);
+
+                        if (highlightItemIndex != -1) {
+                            var nextItemIndex = highlightItemIndex + 1;
+                            if (nextItemIndex != (this.suggestions.length)) {
+                                this.highlightOption = this.suggestions[nextItemIndex];
+                                this.highlightOptionChanged = true;
+                            }
+                        }
+                        else {
+                            this.highlightOption = this.suggestions[0];
+                        }
                     }
 
                     event.preventDefault();
@@ -524,10 +642,31 @@ export class AutoComplete implements AfterViewChecked,AfterContentInit,OnDestroy
 
                 //up
                 case 38:
-                    if (highlightItemIndex > 0) {
-                        let prevItemIndex = highlightItemIndex - 1;
-                        this.highlightOption = this.suggestions[prevItemIndex];
-                        this.highlightOptionChanged = true;
+                    if (this.group) {
+                        let highlightItemIndex = this.findOptionGroupIndex(this.highlightOption, this.suggestions);
+                        if (highlightItemIndex !== -1) {
+                            let prevItemIndex = highlightItemIndex.itemIndex - 1;
+                            if (prevItemIndex >= 0) {
+                                this.highlightOption = this.getOptionGroupChildren(this.suggestions[highlightItemIndex.groupIndex])[prevItemIndex];
+                                this.highlightOptionChanged = true;
+                            }
+                            else if (prevItemIndex < 0) {
+                                let prevGroup = this.suggestions[highlightItemIndex.groupIndex - 1];
+                                if (prevGroup) {
+                                    this.highlightOption = this.getOptionGroupChildren(prevGroup)[this.getOptionGroupChildren(prevGroup).length - 1];
+                                    this.highlightOptionChanged = true;
+                                }
+                            }
+                        }
+                    }
+                    else {
+                        let highlightItemIndex = this.findOptionIndex(this.highlightOption, this.suggestions);
+
+                        if (highlightItemIndex > 0) {
+                            let prevItemIndex = highlightItemIndex - 1;
+                            this.highlightOption = this.suggestions[prevItemIndex];
+                            this.highlightOptionChanged = true;
+                        }
                     }
 
                     event.preventDefault();
@@ -586,8 +725,14 @@ export class AutoComplete implements AfterViewChecked,AfterContentInit,OnDestroy
     }
 
     onInputFocus(event) {
+        if (!this.itemClicked && this.completeOnFocus ) {
+            let queryValue = this.multiple ? this.multiInputEL.nativeElement.value : this.inputEL.nativeElement.value;
+            this.search(event, queryValue);
+        }
+
         this.focus = true;
         this.onFocus.emit(event);
+        this.itemClicked = false;
     }
 
     onInputBlur(event) {
@@ -597,7 +742,7 @@ export class AutoComplete implements AfterViewChecked,AfterContentInit,OnDestroy
     }
 
     onInputChange(event) {
-        if (this.forceSelection && this.suggestions) {
+        if (this.forceSelection) {
             let valid = false;
             let inputValue = event.target.value.trim();
 
@@ -625,6 +770,7 @@ export class AutoComplete implements AfterViewChecked,AfterContentInit,OnDestroy
 
                 this.onClear.emit(event);
                 this.onModelChange(this.value);
+                this.updateFilledState();
             }
         }
     }
@@ -646,11 +792,11 @@ export class AutoComplete implements AfterViewChecked,AfterContentInit,OnDestroy
         return selected;
     }
 
-    findOptionIndex(option): number {
+    findOptionIndex(option, suggestions): number {
         let index: number = -1;
-        if (this.suggestions) {
-            for (let i = 0; i < this.suggestions.length; i++) {
-                if (ObjectUtils.equals(option, this.suggestions[i])) {
+        if (suggestions) {
+            for (let i = 0; i < suggestions.length; i++) {
+                if (ObjectUtils.equals(option, suggestions[i])) {
                     index = i;
                     break;
                 }
@@ -658,6 +804,28 @@ export class AutoComplete implements AfterViewChecked,AfterContentInit,OnDestroy
         }
 
         return index;
+    }
+
+    findOptionGroupIndex(val: any, opts: any[]): any {
+        let groupIndex, itemIndex;
+
+        if (opts) {
+            for (let i = 0; i < opts.length; i++) {
+                groupIndex = i;
+                itemIndex = this.findOptionIndex(val, this.getOptionGroupChildren(opts[i]));
+
+                if (itemIndex !== -1) {
+                    break;
+                }
+            }
+        }
+
+        if (itemIndex !== -1) {
+            return {groupIndex: groupIndex, itemIndex: itemIndex};
+        }
+        else {
+            return -1;
+        }
     }
 
     updateFilledState() {
@@ -668,7 +836,7 @@ export class AutoComplete implements AfterViewChecked,AfterContentInit,OnDestroy
     }
 
     updateInputField() {
-        let formattedValue = this.value ? (this.field ? ObjectUtils.resolveFieldData(this.value, this.field)||'' : this.value) : '';
+        let formattedValue = this.resolveFieldData(this.value);
         this.inputFieldValue = formattedValue;
 
         if (this.inputEL && this.inputEL.nativeElement) {
@@ -680,7 +848,9 @@ export class AutoComplete implements AfterViewChecked,AfterContentInit,OnDestroy
 
     bindDocumentClickListener() {
         if (!this.documentClickListener) {
-            this.documentClickListener = this.renderer.listen('document', 'click', (event) => {
+            const documentTarget: any = this.el ? this.el.nativeElement.ownerDocument : 'document';
+
+            this.documentClickListener = this.renderer.listen(documentTarget, 'click', (event) => {
                 if (event.which === 3) {
                     return;
                 }
@@ -716,7 +886,7 @@ export class AutoComplete implements AfterViewChecked,AfterContentInit,OnDestroy
         this.documentResizeListener = this.onWindowResize.bind(this);
         window.addEventListener('resize', this.documentResizeListener);
     }
-    
+
     unbindDocumentResizeListener() {
         if (this.documentResizeListener) {
             window.removeEventListener('resize', this.documentResizeListener);
@@ -728,21 +898,50 @@ export class AutoComplete implements AfterViewChecked,AfterContentInit,OnDestroy
         this.hide();
     }
 
+    bindScrollListener() {
+        if (!this.scrollHandler) {
+            this.scrollHandler = new ConnectedOverlayScrollHandler(this.containerEL.nativeElement, () => {
+                if (this.overlayVisible) {
+                    this.hide();
+                }
+            });
+        }
+
+        this.scrollHandler.bindScrollListener();
+    }
+
+    unbindScrollListener() {
+        if (this.scrollHandler) {
+            this.scrollHandler.unbindScrollListener();
+        }
+    }
+
     onOverlayHide() {
         this.unbindDocumentClickListener();
         this.unbindDocumentResizeListener();
+        this.unbindScrollListener();
         this.overlay = null;
+        this.onHide.emit();
     }
 
     ngOnDestroy() {
+        if (this.forceSelectionUpdateModelTimeout) {
+            clearTimeout(this.forceSelectionUpdateModelTimeout);
+            this.forceSelectionUpdateModelTimeout = null;
+        }
+
+        if (this.scrollHandler) {
+            this.scrollHandler.destroy();
+            this.scrollHandler = null;
+        }
         this.restoreOverlayAppend();
         this.onOverlayHide();
     }
 }
 
 @NgModule({
-    imports: [CommonModule,InputTextModule,ButtonModule,SharedModule],
-    exports: [AutoComplete,SharedModule],
+    imports: [CommonModule,InputTextModule,ButtonModule,SharedModule,RippleModule,ScrollingModule],
+    exports: [AutoComplete,SharedModule,ScrollingModule],
     declarations: [AutoComplete]
 })
 export class AutoCompleteModule { }
